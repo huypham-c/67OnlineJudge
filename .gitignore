@@ -2,5 +2,6 @@
 __pycache__
 docs
 test_judge.py
+docs.py
 *.db
 Problems

@@ -18,8 +18,22 @@ security = HTTPBearer()
 
 def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     """
-    Hàm gác cổng: Bóc tách Token do người dùng gửi lên để lấy ra user_id.
-    Nếu Token giả hoặc hết hạn, tự động đuổi ra ngoài (Lỗi 401).
+    Extract and validate the JWT token to authenticate the user.
+
+    Parameters
+    ----------
+    credentials : HTTPAuthorizationCredentials
+        The bearer token provided in the authorization header.
+
+    Returns
+    -------
+    str
+        The extracted user_id from the valid token.
+
+    Raises
+    ------
+    HTTPException
+        If the token is missing, expired, or invalid.
     """
     token = credentials.credentials
     try:
@@ -43,26 +57,58 @@ app.add_middleware(
 )
 
 class LoginRequest(BaseModel):
+    """
+    Pydantic model representing the expected body for login requests.
+    
+    Parameters
+    ----------
+    username : str
+        The user's login name.
+    password : str
+        The user's plain text password.
+    """
     username: str
     password: str
 
-def create_access_token(data: dict):
-    """Generate a stateless JWT token for the user."""
+def create_access_token(data: dict) -> str:
+    """
+    Generate a stateless JWT access token for a given user payload.
+
+    Parameters
+    ----------
+    data : dict
+        The payload data to encode into the token (e.g., user_id, role).
+
+    Returns
+    -------
+    str
+        The encoded JWT string valid for 24 hours.
+    """
     to_encode = data.copy()
     expire = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-@app.get("/")
-async def root():
-    """Trang chủ của API"""
-    return {"message": "Chào mừng đến với Hệ thống Online Judge!"}
 
 @app.post("/login")
-async def login(request: LoginRequest):
+async def login(request: LoginRequest) -> dict:
     """
-    Endpoint to authenticate users and issue a JWT token.
-    The frontend will send username/password, and we return a 'passport'.
+    Authenticate a user and issue a JWT token.
+
+    Parameters
+    ----------
+    request : LoginRequest
+        The JSON body containing username and password.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the access_token, token_type, username, and role.
+        
+    Raises
+    ------
+    HTTPException
+        If the user is not found or the password is incorrect.
     """
     user = db.get_user_by_username(request.username)
     
@@ -81,20 +127,24 @@ async def login(request: LoginRequest):
         "role": user.__class__.__name__.lower()
     }
 
-@app.get("/health")
-async def health_check():
-    """Simple endpoint to verify if the server is running."""
-    return {"status": "online", "server_location": "Vung Tau"}
 
 @app.get("/me")
-async def get_my_profile(user_id: str = Depends(get_current_user_id)):
+async def get_my_profile(user_id: str = Depends(get_current_user_id)) -> dict:
     """
-    Endpoint yêu cầu phải có Token mới xem được.
-    Trả về thông tin của chính người đang đăng nhập.
+    Retrieve the basic profile information of the currently authenticated user.
+
+    Parameters
+    ----------
+    user_id : str
+        The ID of the user, automatically injected by the token dependency.
+
+    Returns
+    -------
+    dict
+        A success message including the authenticated user's ID.
     """
-    
     return {
         "status": "success",
-        "message": "Bạn đã vượt qua trạm kiểm soát thành công!",
+        "message": "Token validation successful!",
         "your_user_id_is": user_id
     }
