@@ -1,5 +1,5 @@
 import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set
 
 class Problem:
     """
@@ -66,9 +66,10 @@ class Problem:
         
         self.test_cases: List['Problem.TestCase'] = []
 
+
 class Problemset:
     """
-    Base class representing a collection of problems (e.g., Contest, Assignment).
+    Represent a collection of problems (e.g., Contest, Assignment).
 
     Parameters
     ----------
@@ -80,38 +81,50 @@ class Problemset:
         The timestamp when the problem set opens.
     end_time : datetime.datetime
         The timestamp when the problem set closes.
+    set_type : str, optional
+        The category of the problem set, defaults to 'assignment'.
     """
-    def __init__(self, problemset_id: str, title: str, start_time: datetime.datetime, end_time: datetime.datetime):
+    def __init__(self, problemset_id: str, title: str, start_time: datetime.datetime, end_time: datetime.datetime, set_type: str = "assignment"):
         self.problemset_id = problemset_id
         self.title = title
         self.start_time = start_time
         self.end_time = end_time
-        self.problem_ids = set()
+        self.set_type = set_type
+        self.problem_ids: Set[str] = set()
 
-    def add_problem(self, problem: Problem):
+    def add_problem(self, problem_id: str):
         """
         Add a problem to this problem set.
 
         Parameters
         ----------
-        problem : Problem
-            The Problem object to be added.
+        problem_id : str
+            The ID of the problem to be added.
+        """
+        self.problem_ids.add(problem_id)
+
+    def generate_leaderboard(self) -> dict:
+        """
+        Calculate and generate the current leaderboard for this problem set.
+
+        Returns
+        -------
+        dict
+            A structured dictionary containing the ranked students and their scores.
         """
         pass
 
-class Contest(Problemset):
-    """
-    Represent a competitive contest with a strict timeframe and public leaderboard.
-    Inherits from Problemset.
-    """
-    pass
+    def get_completion_status(self) -> dict:
+        """
+        Generate a report of student completion statuses for this problem set.
 
-class Assignment(Problemset):
-    """
-    Represent a homework assignment. 
-    May include features like deadline warnings. Inherits from Problemset.
-    """
-    pass
+        Returns
+        -------
+        dict
+            A mapping of student IDs to their completion status (e.g., done, pending, late).
+        """
+        pass
+
 
 class Submission:
     """
@@ -154,4 +167,6 @@ class Submission:
         mem_used : int
             The actual memory consumed in MB.
         """
-        pass
+        self.status = new_status
+        self.execution_time = time
+        self.memory_used = mem_used
