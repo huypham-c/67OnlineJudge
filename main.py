@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from database import DatabaseManager
 from users import User
+from judge import JudgeEngine
 
 app = FastAPI(title="67")
 
@@ -69,6 +70,23 @@ class LoginRequest(BaseModel):
     """
     username: str
     password: str
+    
+class SubmitCodeRequest(BaseModel):
+    """
+    Pydantic model representing the expected body for submission request.
+    
+    Parameters
+    ----------
+    source_code : str
+        The source code to submit.
+    language : str
+        The language the source code is in.
+    problemset_id : str
+        The id of the problemset the submission is for.
+    """
+    source_code: str
+    language: str
+    problemset_id: str
 
 def create_access_token(data: dict) -> str:
     """
@@ -147,4 +165,54 @@ async def get_my_profile(user_id: str = Depends(get_current_user_id)) -> dict:
         "status": "success",
         "message": "Token validation successful!",
         "your_user_id_is": user_id
+    }
+@app.post("/problems/{problem_id}/submit")
+async def submit_code(
+    problem_id: str,
+    request: SubmitCodeRequest,
+    user_id: str = Depends(get_current_user_id)
+) -> dict:
+    
+    if not request.problemset_id or not request.problemset_id.strip():
+        raise HTTPException(
+            status_code=400, 
+            detail="A valid problemset_id is strictly required to submit code."
+        )
+
+    user = db.get_user(user_id)
+    problem = db.get_problem(problem_id)
+    
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    if request.language not in problem.allowed_langs:
+        raise HTTPException(status_code=400, detail=f"{request.language} is not allowed")
+
+    banned_words = ["os.system", "subprocess", "eval", "exec", "open", "__import__"]
+    for word in banned_words:
+        if word in request.source_code:
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Found banned keyword: {word} in the submission"
+            )
+
+    submission = user.submit_code(
+        problem_id=problem.problem_id,
+        source_code=request.source_code,
+        language=request.language
+    )
+
+    judge = JudgeEngine()
+    result = judge.evaluate_submission(submission, problem)
+
+    db.save_submission(submission, result, request.problemset_id)
+
+    return {
+        "status": "success",
+        "submission_id": submission.submission_id,
+        "verdict": result["verdict"],
+        "execution_time": result["time_used"],
+        "passed_cases": result["passed_cases"],
+        "total_cases": result.get("total_cases", 0),
+        "details": result.get("details", [])
     }

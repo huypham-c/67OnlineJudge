@@ -1,54 +1,6 @@
 import operator
 from typing import Any, Callable, List
 
-class FastString(str):
-    """
-    String that uses the Rabin-Karp algorithm for fast substring matching, 
-    inherited from Python's built-in str.
-    """
-
-    def __contains__(self, key: str) -> bool:
-        """
-        Check if a substring exists within the string using Rabin-Karp.
-
-        Parameters
-        ----------
-        key : str
-            The substring to search for.
-
-        Returns
-        -------
-        bool
-            True if the substring is found, False otherwise.
-        """
-        n = len(self)
-        m = len(key)
-
-        if m == 0: 
-            return True
-        if m > n:
-            return False
-        
-        log_base = 8
-        mask = 0xFFFFFFFF
-
-        p_hash = 0
-        t_hash = 0
-
-        for i in range(m):
-            p_hash = ((p_hash << log_base) + ord(key[i])) & mask
-            t_hash = ((t_hash << log_base) + ord(self[i])) & mask
-
-        for i in range(n - m + 1):
-            if p_hash == t_hash:
-                if self[i:i + m] == key:
-                    return True
-            if i < n - m:
-                t_hash = ((t_hash - (ord(self[i]) << (log_base * (m - 1))) << log_base) + ord(self[i + m])) & mask
-        
-        return False
-    
-
 class PriorityQueue:
     """
     Queue that brings the element with the highest priority to the front 
@@ -162,25 +114,87 @@ class BST:
         data : Any
             The data to be stored in the node.
         """
-        def __init__(self, data: Any):
+        def __init__(self, data: Any, color: bool = True):
             self.data = data
+            self.color = color
             self.left = None
             self.right = None
+            self.parent = None
 
     def __init__(self, comparator: Callable = operator.lt):
-        self.root = None
+        self.NIL = self._node(data=None, color=False)
+        self.root = self.NIL
         self.comparator = comparator
-
-    def _insert(self, node, data: Any):
-        if node is None:
-            return self._node(data)
-        elif node.data == data:
-            return node
-        elif self.comparator(node.data, data):
-            node.right = self._insert(node.right, data)
+    
+    def _transplant(self, u: _node, v: _node):
+        if u.parent == None:
+            self.root = v
+        elif u == u.parent.left:
+            u.parent.left = v
         else:
-            node.left = self._insert(node.left, data)
-        return node
+            u.parent.right = v
+        v.parent = u.parent
+
+    def _rotate_left(self, node: _node):
+        right_child = node.right
+        node.right = right_child.left
+        if right_child.left != self.NIL:
+            right_child.left.parent = node
+
+        self._transplant(node, right_child)
+
+        right_child.left = node
+        node.parent = right_child
+
+    def _rotate_right(self, node: _node):
+        left_child = node.left
+        node.left = left_child.right
+        if left_child.right != self.NIL:
+            left_child.right.parent = node
+
+        self._transplant(node, left_child)
+
+        left_child.right = node
+        node.parent = left_child
+
+    def _fix_insert(self, node: _node):
+        while node.parent.color:
+            if node.parent == node.parent.parent.left:
+                unc = node.parent.parent.right
+                if unc.color:
+                    node.parent.color = False
+                    unc.color = False
+                    node.parent.parent.color = True
+                    node = node.parent.parent
+                else:
+                    if node == node.parent.right:
+                        node = node.parent
+                        self._rotate_left(node)
+
+                    node.parent.color = False
+                    node.parent.parent.color = True
+                    self._rotate_right(node.parent.parent)
+
+            else:
+                unc = node.parent.parent.left
+                if unc.color:
+                    node.parent.color = False
+                    unc.color = False
+                    node.parent.parent.color = True
+                    node = node.parent.parent
+                else:
+                    if node == node.parent.left:
+                        node = node.parent
+                        self._rotate_right(node)
+
+                    node.parent.color = False
+                    node.parent.parent.color = True
+                    self._rotate_left(node.parent.parent)
+
+            if node == self.root:
+                break
+
+        self.root.color = False
 
     def insert(self, data: Any):
         """
@@ -191,19 +205,46 @@ class BST:
         data : Any
             The data to be inserted.
         """
-        self.root = self._insert(self.root, data)
+        node = self._node(data, color=True)
+        node.parent = None
+        node.left = self.NIL
+        node.right = self.NIL
 
-    def _search(self, node, data: Any) -> bool:
-        if node is None:
-            return False
-        if node.data == data:
-            return True
+        y = None
+        x = self.root
+
+        while x != self.NIL:
+            y = x
+            if self.comparator(node.data, x.data):
+                x = x.left
+            else:
+                x = x.right
+
+        node.parent = y
+        if y is None:
+            self.root = node
+        elif self.comparator(node.data, y.data):
+            y.left = node
+        else:
+            y.right = node
+
+        if node.parent is None:
+            node.color = False
+            return
+        if node.parent.parent is None:
+            return 
+        
+        self._fix_insert(node)
+
+    def _search(self, node, data: Any) -> _node:
+        if node is self.NIL or node.data == data:
+            return node
         elif self.comparator(node.data, data):
             return self._search(node.right, data)
         else:
             return self._search(node.left, data)
 
-    def search(self, data: Any) -> bool:
+    def search(self, data: Any) -> _node:
         """
         Search for a specific element in the tree.
 
@@ -214,35 +255,92 @@ class BST:
 
         Returns
         -------
-        bool
-            True if the data exists in the tree, False otherwise.
+        _node
+            Return the node contains the data, return NIL node otherwise
         """
         return self._search(self.root, data)
+    
+    def _fix_delete(self, node: _node):
+        while node != self.root and node.color == False:
+            if node == node.parent.left:
+                sibling = node.parent.right
+                if sibling.color:
+                    sibling.color = False
+                    node.parent.color = True
+                    self._rotate_left(node.parent)
+                    sibling = node.parent.right
+                else:
+                    if not sibling.right.color:
+                        if not sibling.left.color:
+                            sibling.color = True
+                            node = node.parent
+                        else:
+                            sibling.left.color = False
+                            sibling.color = True
+                            self._rotate_right(sibling)
+                            sibling = node.parent.right
+                    else:
+                        sibling.color = node.parent.color
+                        node.parent.color = False
+                        sibling.right.color = False
+                        self._rotate_left(node.parent)
+                        node = self.root
+            else:
+                sibling = node.parent.left
+                if sibling.color:
+                    sibling.color = False
+                    node.parent.color = True
+                    self._rotate_right(node.parent)
+                    sibling = node.parent.left
+                else:
+                    if not sibling.left.color:
+                        if not sibling.right.color:
+                            sibling.color = True
+                            node = node.parent
+                        else:
+                            sibling.right.color = False
+                            sibling.color = True
+                            self._rotate_left(sibling)
+                            sibling = node.parent.left
+                    else:
+                        sibling.color = node.parent.color
+                        node.parent.color = False
+                        sibling.left.color = False
+                        self._rotate_right(node.parent)
+                        node = self.root
+        node.color = False
 
-    def _delete(self, node, data):
-        if node is None:
-            return None
+    def _delete(self, node: _node):
+        y = node
+        y_color = node.color
 
-        if node.data == data: 
-            if node.left is None:
-                return node.right
-            if node.right is None:
-                return node.left
-            
-            replacement = node.right
-
-            while replacement is not None and replacement.left is not None:
-                replacement = replacement.left
-            
-            node.data = replacement.data
-            node.right = self._delete(node.right, replacement.data)
-
-        elif self.comparator(node.data, data):
-            node.right = self._delete(node.right, data)
+        if node.left == self.NIL:
+            x = node.right
+            self._transplant(node, node.right)
+        elif node.right == self.NIL:
+            x = node.left
+            self._transplant(node, node.left)
         else:
-            node.left = self._delete(node.left, data)
+            y = node.right
+            while y.left != self.NIL:
+                y = y.left
+            y_color = y.color
+            x = y.right
 
-        return node
+            if y.parent == node:
+                x.parent = y #Because of the common NIL node bs
+            else:
+                self._transplant(y, y.right)
+                y.right = node.right
+                y.right.parent = y
+
+            self._transplant(node, y)
+            y.left = node.left
+            y.left.parent = y
+            y.color = node.color
+
+        if not y_color:
+            self._fix_delete(x)
 
     def delete(self, data: Any) -> bool:
         """
@@ -259,14 +357,15 @@ class BST:
             True if deletion is successful, False otherwise
         """
         
-        if not self.search(data):
+        node = self.search(data)
+        
+        if node == self.NIL:
             return False
-            
-        self.root = self._delete(self.root, data)
+        self._delete(node)
         return True
 
     def _inorder(self, node, result: List[Any]):
-        if node is not None:
+        if node != self.NIL:
             self._inorder(node.right, result)
             result.append(node.data)
             self._inorder(node.left, result)
@@ -283,3 +382,6 @@ class BST:
         result = []
         self._inorder(self.root, result)
         return result
+    
+
+

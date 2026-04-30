@@ -371,6 +371,25 @@ class DatabaseManager:
             
         conn.close()
         return cls
+    
+    def get_problem(self, problem_id: str) -> Problem:
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute("SELECT problem_id, title, time_limits, mem_limits, allowed_langs FROM Problems WHERE problem_id = ?", (problem_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return None
+            
+        return Problem(
+            problem_id=row[0],
+            title=row[1],
+            description="Loaded from DB",
+            time_limits=json.loads(row[2]),
+            mem_limits=json.loads(row[3]),
+            allowed_lang=json.loads(row[4])
+        )
 
 if __name__ == "__main__":
     init_db()

@@ -1,7 +1,8 @@
 .git
 __pycache__
+Problems
 docs
 test_judge.py
 docs.py
 *.db
-Problems
+*txt
