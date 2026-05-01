@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>67 Online Judge</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Quill.js for Rich Text Editing -->
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen flex flex-col">
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="flex flex-col items-center justify-center min-h-screen">
+        <div class="bg-white p-8 rounded-lg shadow-xl border border-gray-100 w-96">
+            <h1 class="text-3xl font-bold text-center text-slate-800 mb-6">67 OJ Login</h1>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Username</label>
+                    <input type="text" id="login-username" class="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none" value="alice">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Password</label>
+                    <input type="password" id="login-password" class="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none" value="123456">
+                </div>
+                <button onclick="handleLogin()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700 transition">Login</button>
+                <div id="login-error" class="text-red-500 text-sm text-center hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN DASHBOARD (Hidden by default) -->
+    <div id="dashboard-screen" class="hidden flex-col min-h-screen">
+        <!-- Top Navigation Bar -->
+        <nav class="bg-slate-800 text-white shadow-lg">
+            <div class="max-w-7xl mx-auto px-4">
+                <div class="flex justify-between h-16">
+                    <div class="flex items-center space-x-8">
+                        <span class="font-bold text-xl tracking-wider">67 OJ WORKSPACE</span>
+                        <div class="hidden md:flex space-x-2" id="nav-buttons">
+                            <!-- Public Tabs -->
+                            <button onclick="switchTab('tab-overview')" class="tab-btn bg-slate-900 px-3 py-2 rounded-md text-sm font-medium" data-target="tab-overview">Overview</button>
+                            <button onclick="switchTab('tab-submit')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" data-target="tab-submit">Submit Code</button>
+                            <button onclick="switchTab('tab-leaderboard')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" data-target="tab-leaderboard">Leaderboard</button>
+                            
+                            <!-- Restricted Tabs (Hidden for students) -->
+                            <button onclick="switchTab('tab-create')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium admin-only hidden" data-target="tab-create">Create Problem</button>
+                            <button onclick="switchTab('tab-assign')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium admin-only hidden" data-target="tab-assign">Assign Problems</button>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <span id="user-greeting" class="text-sm font-medium text-gray-300"></span>
+                        <button onclick="handleLogout()" class="text-sm bg-red-600 hover:bg-red-700 px-3 py-1 rounded transition">Logout</button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="flex-grow max-w-7xl mx-auto px-4 py-8 w-full">
+
+            <!-- TAB: Overview -->
+            <div id="tab-overview" class="tab-content block">
+                <h1 class="text-3xl font-bold mb-6 text-slate-800">System Overview</h1>
+                <div class="bg-white p-6 rounded-lg shadow border border-gray-100">
+                    <p class="text-gray-600">Welcome to the Online Judge. Select a tab above to get started.</p>
+                </div>
+            </div>
+
+            <!-- TAB: Submit Code -->
+            <div id="tab-submit" class="tab-content hidden">
+                <h1 class="text-3xl font-bold mb-6 text-slate-800">Submit Solution</h1>
+                <div class="bg-white rounded-lg shadow border border-gray-100 grid grid-cols-12 overflow-hidden h-[700px]">
+                    
+                    <!-- Left Panel: Selectors & List -->
+                    <div class="col-span-3 bg-gray-50 border-r flex flex-col p-4 space-y-4">
+                        <select id="select-class" class="p-2 border rounded w-full bg-white outline-none focus:ring-2 focus:ring-blue-500"></select>
+                        <select id="select-problemset" class="p-2 border rounded w-full bg-white outline-none focus:ring-2 focus:ring-blue-500"></select>
+                        
+                        <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mt-2">Problem List</div>
+                        <div id="list-problem" class="flex-grow overflow-y-auto pr-2 space-y-2">
+                            <div class="text-gray-400 text-sm italic">Select a problemset...</div>
+                        </div>
+                    </div>
+
+                    <!-- Middle Panel: Description -->
+                    <div class="col-span-4 border-r bg-white p-6 overflow-y-auto" id="problem-description">
+                        <div class="h-full flex items-center justify-center text-gray-400 italic">
+                            Select a problem from the left menu to view details.
+                        </div>
+                    </div>
+
+                    <!-- Right Panel: Code Editor -->
+                    <div class="col-span-5 bg-slate-50 flex flex-col p-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Source Code</label>
+                            <select id="submit-lang" class="border p-1 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="python">Python 3</option>
+                                <option value="cpp">C++</option>
+                            </select>
+                        </div>
+                        <textarea id="submit-code" class="flex-grow w-full border border-gray-200 p-4 font-mono text-sm rounded focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none shadow-inner" placeholder="def solve():&#10;    pass"></textarea>
+                        
+                        <button onclick="submitSolution()" class="mt-4 w-full bg-green-600 text-white font-bold py-3 rounded shadow hover:bg-green-700 transition">Execute & Submit</button>
+                        
+                        <div id="submit-log" class="mt-4 p-4 bg-slate-800 text-green-400 font-mono text-sm rounded min-h-[120px] whitespace-pre-wrap overflow-y-auto">System ready.</div>
+                    </div>
+                </div>
+            </div>
+            <!-- TAB: Leaderboard -->
+            <div id="tab-leaderboard" class="tab-content hidden">
+                <h1 class="text-3xl font-bold mb-6 text-slate-800">Live Leaderboard</h1>
+                <div class="bg-white p-6 rounded-lg shadow border border-gray-100">
+                    <div class="flex space-x-4 mb-6 bg-gray-50 p-4 border rounded">
+                        <select id="lb-select-class" class="border p-2 rounded w-48 outline-none focus:ring-2 focus:ring-blue-500"></select>
+                        <select id="lb-select-set" class="border p-2 rounded w-64 outline-none focus:ring-2 focus:ring-blue-500"></select>
+                        
+                        <button onclick="fetchLeaderboard()" class="bg-blue-600 text-white px-6 rounded font-bold hover:bg-blue-700 transition shadow">Refresh Board</button>
+                    </div>
+                    <div id="lb-results" class="font-mono space-y-2">
+                        <div class="text-gray-400 italic">Select a class and problemset to view rankings.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: Create Problem (Restricted) -->
+            <div id="tab-create" class="tab-content hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-slate-800">Create New Problem</h1>
+                    <div class="bg-gray-200 p-1 rounded-lg flex space-x-1">
+                        <button id="btn-mode-manual" onclick="switchProblemMode('manual')" class="px-4 py-2 bg-white shadow-sm rounded-md text-sm font-bold text-slate-800 transition">Manual</button>
+                        <button id="btn-mode-zip" onclick="switchProblemMode('zip')" class="px-4 py-2 rounded-md text-sm font-bold text-gray-500 hover:text-slate-800 transition">ZIP Import</button>
+                    </div>
+                </div>
+                
+                <div class="bg-white p-8 rounded-lg shadow border border-gray-100">
+                    <!-- ZIP Mode -->
+                    <div id="mode-zip" class="hidden">
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:bg-gray-50 cursor-pointer" onclick="document.getElementById('zip-upload').click()">
+                            <h3 class="text-lg font-medium text-gray-900">Click to upload a ZIP package</h3>
+                            <input type="file" id="zip-upload" accept=".zip" class="hidden" onchange="handleZipSelect(event)">
+                            <p id="zip-file-name" class="mt-4 text-blue-600 font-bold"></p>
+                        </div>
+                        <button onclick="submitZipProblem()" class="mt-4 w-full bg-blue-600 text-white font-bold py-2 rounded">Upload ZIP</button>
+                    </div>
+
+                    <!-- Manual Mode -->
+                    <div id="mode-manual" class="block">
+                        <div class="grid grid-cols-2 gap-6 mb-6">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Title</label>
+                                <input type="text" id="prob-title" class="w-full border rounded p-2">
+                            </div>
+                            <div class="flex space-x-4">
+                                <div class="w-1/2">
+                                    <label class="block text-sm font-medium mb-1">Python Time (s)</label>
+                                    <input type="number" id="time-python" value="2.0" step="0.1" class="w-full border rounded p-2">
+                                </div>
+                                <div class="w-1/2">
+                                    <label class="block text-sm font-medium mb-1">C++ Time (s)</label>
+                                    <input type="number" id="time-cpp" value="1.0" step="0.1" class="w-full border rounded p-2">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium mb-1">Description</label>
+                            <div id="editor-container" class="h-64 bg-white"></div>
+                        </div>
+
+                        <div class="mb-6 border-t pt-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h2 class="text-xl font-bold">Test Cases</h2>
+                                <button onclick="addTestCase()" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">+ Add Case</button>
+                            </div>
+                            <div id="testcases-wrapper" class="space-y-4"></div>
+                        </div>
+
+                        <button onclick="submitManualProblem()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">Save Problem</button>
+                    </div>
+                </div>
+            </div>
+            <!-- TAB: Assign Problems (Restricted) -->
+            <div id="tab-assign" class="tab-content hidden">
+                <h1 class="text-3xl font-bold mb-6 text-slate-800">Assign Problems to Class</h1>
+                <div class="bg-white p-6 rounded-lg shadow border border-gray-100 grid grid-cols-2 gap-6 min-h-[500px]">
+                    
+                    <!-- Left: Select Target -->
+                    <div class="space-y-4 border-r pr-6">
+                        <h2 class="text-xl font-bold mb-4 text-slate-800">1. Select Target</h2>
+                        <select id="assign-class" class="p-2 border rounded w-full bg-white outline-none focus:ring-2 focus:ring-blue-500" onchange="loadAssignProblemsets(this.value)">
+                            <option value="">-- Select Class --</option>
+                        </select>
+                        <select id="assign-problemset" class="p-2 border rounded w-full bg-white outline-none focus:ring-2 focus:ring-blue-500" onchange="loadCurrentAssignedProblems(this.value)">
+                            <option value="">-- Select Problemset --</option>
+                        </select>
+                        
+                        <!-- Hiển thị các bài đang có trong tập -->
+                        <div id="current-problems-box" class="mt-6 p-4 bg-blue-50 border border-blue-100 rounded hidden">
+                            <h3 class="font-bold text-sm text-blue-800 mb-2">Currently Assigned Problems:</h3>
+                            <ul id="current-problems-list" class="text-sm space-y-1 text-blue-700 list-disc pl-4"></ul>
+                        </div>
+                    </div>
+
+                    <!-- Right: Multi-select Problems -->
+                    <div class="flex flex-col">
+                        <h2 class="text-xl font-bold mb-4 text-slate-800">2. Select Problems to Add</h2>
+                        <div id="all-problems-list" class="flex-grow overflow-y-auto border rounded p-2 space-y-2 bg-slate-50 mb-4 h-64">
+                            <div class="text-gray-400 italic text-sm p-2">Loading problems...</div>
+                        </div>
+                        <button onclick="submitAssignProblems()" class="w-full bg-slate-800 text-white font-bold py-3 rounded hover:bg-slate-700 transition shadow">
+                            Add Selected Problems
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Load main logic script -->
+    <script src="app.js"></script>
+</body>
+</html>

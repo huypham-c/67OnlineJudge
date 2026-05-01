@@ -51,16 +51,35 @@ class JudgeEngine:
             return {"verdict": "Unsupported Language"}
 
     def _eval_cpp(self, submission: 'Submission', problem: 'Problem') -> Dict[str, Any]:
-        """Handle compilation and secure execution for C++ using Docker with partial grading logic."""
-        
+        """
+        Handle compilation and secure execution for C++ submissions.
+
+        Utilizes Docker volumes to isolate the compilation process and routes 
+        standard I/O dynamically to prevent unauthorized system access.
+
+        Parameters
+        ----------
+        submission : Submission
+            The submission instance holding the raw C++ code.
+        problem : Problem
+            The reference problem containing time, memory limits, and test cases.
+
+        Returns
+        -------
+        Dict[str, Any]
+            A detailed diagnostic dictionary including the final verdict, 
+            time consumed, and specific breakdown per test case.
+        """
         current_time_limit = problem.time_limits.get(submission.language, 1.0)
         current_mem_limit = problem.mem_limits.get(submission.language, 256)
 
         host_dir = tempfile.mkdtemp()
+        os.chmod(host_dir, 0o777)
         code_path = os.path.join(host_dir, "solution.cpp")
         
         with open(code_path, "w", encoding="utf-8") as f:
             f.write(submission.source_code)
+        os.chmod(code_path, 0o777)
 
         final_verdict = "Accepted"
         final_time = 0.0
@@ -88,6 +107,11 @@ class JudgeEngine:
             for tc in problem.test_cases:
                 start_time = time.time()
                 
+                with open(tc.input_file, "r", encoding="utf-8") as f:
+                    input_data = f.read()
+                with open(tc.output_file, "r", encoding="utf-8") as f:
+                    expected_output = f.read().strip()
+
                 tc_result = {
                     "test_id": tc.test_id,
                     "verdict": "Pending",
@@ -107,7 +131,7 @@ class JudgeEngine:
                     
                     result = subprocess.run(
                         run_cmd,
-                        input=tc.input_data,
+                        input=input_data,
                         text=True,
                         capture_output=True,
                         timeout=current_time_limit + 1.0 
@@ -120,12 +144,14 @@ class JudgeEngine:
                     if result.returncode != 0:
                         tc_verdict = "Memory Limit Exceeded" if result.returncode == 137 else "Runtime Error"
                         tc_result["verdict"] = tc_verdict
+                        if tc_verdict == "Runtime Error" and result.stderr:
+                            tc_result["error_message"] = result.stderr.strip()
                         test_details.append(tc_result)
                         if final_verdict == "Accepted":
                             final_verdict = tc_verdict
                         break
 
-                    if result.stdout.strip() != tc.expected_output:
+                    if result.stdout.strip() != expected_output:
                         tc_result["verdict"] = "Wrong Answer"
                         test_details.append(tc_result)
                         if final_verdict == "Accepted":
@@ -159,16 +185,34 @@ class JudgeEngine:
         }
 
     def _eval_python(self, submission: 'Submission', problem: 'Problem') -> Dict[str, Any]:
-        """Handle secure execution for Python scripts using Docker with partial grading logic."""
-        
+        """
+        Handle execution and partial grading for Python 3 submissions.
+
+        Spawns ephemeral Docker containers with constrained memory and time 
+        limits to evaluate the interpreted script safely.
+
+        Parameters
+        ----------
+        submission : Submission
+            The submission instance containing the raw Python script.
+        problem : Problem
+            The reference problem defining test inputs and expected outputs.
+
+        Returns
+        -------
+        Dict[str, Any]
+            A detailed diagnostic dictionary mapping the execution outcome.
+        """
         current_time_limit = problem.time_limits.get(submission.language, 2.0)
         current_mem_limit = problem.mem_limits.get(submission.language, 512)
         
         host_dir = tempfile.mkdtemp()
+        os.chmod(host_dir, 0o777)
         code_path = os.path.join(host_dir, "solution.py")
         
         with open(code_path, "w", encoding="utf-8") as f:
             f.write(submission.source_code)
+        os.chmod(code_path, 0o777)
 
         final_verdict = "Accepted"
         final_time = 0.0
@@ -179,6 +223,11 @@ class JudgeEngine:
             for tc in problem.test_cases:
                 start_time = time.time()
                 
+                with open(tc.input_file, "r", encoding="utf-8") as f:
+                    input_data = f.read()
+                with open(tc.output_file, "r", encoding="utf-8") as f:
+                    expected_output = f.read().strip()
+
                 tc_result = {
                     "test_id": tc.test_id,
                     "verdict": "Pending",
@@ -198,7 +247,7 @@ class JudgeEngine:
 
                     result = subprocess.run(
                         run_cmd,
-                        input=tc.input_data,
+                        input=input_data,
                         text=True,
                         capture_output=True,
                         timeout=current_time_limit + 1.0
@@ -211,12 +260,14 @@ class JudgeEngine:
                     if result.returncode != 0:
                         tc_verdict = "Memory Limit Exceeded" if result.returncode == 137 else "Runtime Error"
                         tc_result["verdict"] = tc_verdict
+                        if tc_verdict == "Runtime Error" and result.stderr:
+                            tc_result["error_message"] = result.stderr.strip()
                         test_details.append(tc_result)
                         if final_verdict == "Accepted":
                             final_verdict = tc_verdict
                         break
 
-                    if result.stdout.strip() != tc.expected_output:
+                    if result.stdout.strip() != expected_output:
                         tc_result["verdict"] = "Wrong Answer"
                         test_details.append(tc_result)
                         if final_verdict == "Accepted":

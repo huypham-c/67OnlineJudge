@@ -1,5 +1,9 @@
+import os
 import datetime
+import shutil
 from typing import List, Dict, Optional, Set
+
+PROBLEM_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "problems")
 
 class Problem:
     """
@@ -7,7 +11,7 @@ class Problem:
 
     The system expects the following directory structure:
     - description.html: The problem statement in HTML format.
-    - templates/: Contains starter code templates (template.py, template.cpp).
+    - banned_word.txt: List of restricted keywords.
     - input/: Contains standard input files (.txt).
     - output/: Contains expected standard output files (.txt).
 
@@ -38,20 +42,15 @@ class Problem:
         ----------
         test_id : str
             Unique identifier for the test case (usually the filename).
-        input_data : str
-            The standard input (stdin) string to be fed into the program.
-        expected_output : str
-            The expected standard output (stdout) to verify correctness.
-        is_hidden : bool, optional
-            If True, this test case is used for actual grading and is hidden from the student. 
-            Defaults to False.
+        input_file : str
+            The physical path to the standard input (stdin) file.
+        output_file : str
+            The physical path to the expected standard output (stdout) file.
         """
-
-        def __init__(self, test_id: str, input_data: str, expected_output: str, is_hidden: bool = False):
+        def __init__(self, test_id: str, input_file: str, output_file: str):
             self.test_id = test_id
-            self.input_data = input_data
-            self.expected_output = expected_output
-            self.is_hidden = is_hidden
+            self.input_file = input_file
+            self.output_file = output_file
 
     def __init__(self, problem_id: str, title: str, description: str, 
                  time_limits: dict = None, mem_limits: dict = None, 
@@ -63,9 +62,106 @@ class Problem:
         self.time_limits = time_limits if time_limits else {"cpp": 1.0, "python": 2.0}
         self.mem_limits = mem_limits if mem_limits else {"cpp": 256, "python": 512}
         self.allowed_langs = allowed_lang if allowed_lang else ["cpp", "python"]
-        
+
         self.test_cases: List['Problem.TestCase'] = []
 
+    @property
+    def folder_path(self) -> str:
+        """
+        Dynamically compute the storage path matching the current problem_id.
+        
+        Returns
+        -------
+        str
+            The absolute path to the problem's physical data directory.
+        """
+        return os.path.join(PROBLEM_DATA_DIR, self.problem_id)
+
+    def save_problem_data(self, html_content: str, testcases: List[tuple], banned_words: List[str]):
+        """
+        Save physical files for the problem to the disk.
+        
+        Initializes or overwrites the problem directory, generating the description,
+        banned words list, and individual input/output files for each test case.
+        
+        Parameters
+        ----------
+        html_content : str
+            The HTML content of the problem description.
+        testcases : List[tuple]
+            A list of tuples containing (input_data, expected_output).
+        banned_words : List[str]
+            A list of banned words/keywords for this problem.
+        """
+        os.makedirs(self.folder_path, exist_ok=True)
+        
+        input_dir = os.path.join(self.folder_path, "input")
+        output_dir = os.path.join(self.folder_path, "output")
+        
+        if os.path.exists(input_dir):
+            shutil.rmtree(input_dir)
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
+            
+        os.makedirs(input_dir)
+        os.makedirs(output_dir)
+
+        with open(os.path.join(self.folder_path, "description.html"), "w", encoding="utf-8") as f:
+            f.write(html_content)
+            
+        with open(os.path.join(self.folder_path, "banned_word.txt"), "w", encoding="utf-8") as f:
+            f.write("\n".join(banned_words))
+
+        for i, (inp, out) in enumerate(testcases, start=1):
+            with open(os.path.join(input_dir, f"{i}.txt"), "w", encoding="utf-8") as f:
+                f.write(inp)
+            with open(os.path.join(output_dir, f"{i}.txt"), "w", encoding="utf-8") as f:
+                f.write(out)
+
+    def get_banned_words(self) -> List[str]:
+        """
+        Retrieve the list of restricted keywords from local storage.
+
+        Reads the physical 'banned_word.txt' file linked to the current problem 
+        directory to enforce constraints during code submission.
+
+        Returns
+        -------
+        List[str]
+            A comprehensive list of unauthorized code segments or keywords.
+        """
+        banned_path = os.path.join(self.folder_path, "banned_word.txt")
+        if not os.path.exists(banned_path):
+            return []
+        with open(banned_path, "r", encoding="utf-8") as f:
+            return [line.strip() for line in f if line.strip()]
+
+    def load_test_cases(self):
+        """
+        Scan and hydrate test cases from the physical problem directory.
+
+        Dynamically iterates over the 'input' and 'output' folders to map matching 
+        pairs of test configurations and appends them to the problem instance.
+        """
+        self.test_cases = []
+        input_dir = os.path.join(self.folder_path, "input")
+        output_dir = os.path.join(self.folder_path, "output")
+        
+        if not os.path.exists(input_dir) or not os.path.exists(output_dir):
+            return
+
+        for filename in os.listdir(input_dir):
+            if filename.endswith(".txt"):
+                base_name = filename[:-4] 
+                input_path = os.path.join(input_dir, filename)
+                output_path = os.path.join(output_dir, filename)
+                
+                if os.path.exists(output_path):
+                    self.test_cases.append(self.TestCase(
+                        test_id=base_name,
+                        input_file=input_path,
+                        output_file=output_path,
+                    ))
 
 class Problemset:
     """

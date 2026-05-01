@@ -2,6 +2,7 @@ import sqlite3
 import json
 import hashlib
 import os
+import datetime
 from typing import Dict, Any, List, Optional
 from models.problems import Submission, Problemset, Problem
 from models.users import User, Classroom
@@ -161,7 +162,7 @@ class DatabaseManager:
         params : tuple, optional
             The parameters to bind to the query.
         """
-        conn = sqlite3.connect(self.db_name)
+        conn = sqlite3.connect(self.db_name, timeout=10.0)
         conn.execute("PRAGMA foreign_keys = 1")
         cursor = conn.cursor()
         try:
@@ -375,7 +376,21 @@ class DatabaseManager:
         conn.close()
         return cls
     
-    def get_problem(self, problem_id: str) -> Problem:
+    def get_problem(self, problem_id: str) -> Optional[Problem]:
+        """
+        Retrieve a specific problem along with its test cases from storage.
+
+        Parameters
+        ----------
+        problem_id : str
+            The unique identifier of the problem.
+
+        Returns
+        -------
+        Optional[Problem]
+            The hydrated Problem object loaded from the database and local disk,
+            or None if the problem is not found.
+        """
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
         cursor.execute("SELECT problem_id, title, time_limits, mem_limits, allowed_langs FROM Problems WHERE problem_id = ?", (problem_id,))
@@ -385,7 +400,7 @@ class DatabaseManager:
         if not row:
             return None
             
-        return Problem(
+        problem = Problem(
             problem_id=row[0],
             title=row[1],
             description="Loaded from DB",
@@ -393,8 +408,23 @@ class DatabaseManager:
             mem_limits=json.loads(row[3]),
             allowed_lang=json.loads(row[4])
         )
+        problem.load_test_cases()
+        return problem
 
-    def get_problemset(self, problemset_id: str) -> Problem:
+    def get_problemset(self, problemset_id: str) -> Optional[Problemset]:
+        """
+        Retrieve a specific problem set configuration.
+
+        Parameters
+        ----------
+        problemset_id : str
+            The ID of the problem set.
+
+        Returns
+        -------
+        Optional[Problemset]
+            The hydrated Problemset object, or None if it does not exist.
+        """
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
         cursor.execute("SELECT problemset_id, title, set_type, start_time, end_time FROM Problemsets WHERE problemset_id = ?", (problemset_id,))
@@ -404,18 +434,30 @@ class DatabaseManager:
         if not row:
             return None
             
+        start_time_obj = datetime.datetime.fromisoformat(row[3]) if isinstance(row[3], str) else row[3]
+        end_time_obj = datetime.datetime.fromisoformat(row[4]) if isinstance(row[4], str) else row[4]
+            
         return Problemset(
             problemset_id=row[0],
             title=row[1],
-            start_time=row[3],
-            end_time=row[4],
+            start_time=start_time_obj,
+            end_time=end_time_obj,
             set_type=row[2]
         )
     
     def get_problemset_scores(self, problemset_id: str) -> list:
         """
-        Fetch the highest score per user for a specific problem set.
-        Returns a list of tuples containing (user_id, total_score).
+        Fetch the highest accumulated score per user for a specific problem set.
+
+        Parameters
+        ----------
+        problemset_id : str
+            The ID of the problem set to aggregate.
+
+        Returns
+        -------
+        list
+            A list of tuples structured as (user_id, total_score).
         """
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
@@ -436,6 +478,131 @@ class DatabaseManager:
         conn.close()
         
         return results
+    
+    def get_submission(self, submission_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch the detailed evaluation results of a code submission.
+
+        Parameters
+        ----------
+        submission_id : str
+            The unique identifier of the submission.
+
+        Returns
+        -------
+        Optional[Dict[str, Any]]
+            A dictionary containing the verdict, execution time, passed cases, 
+            and test details, or None if not found.
+        """
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT verdict, execution_time, passed_cases, total_cases, test_details
+            FROM Submissions WHERE submission_id = ?
+        ''', (submission_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return None
+            
+        return {
+            "verdict": row[0],
+            "execution_time": row[1],
+            "passed_cases": row[2],
+            "total_cases": row[3],
+            "test_details": json.loads(row[4]) if row[4] else []
+        }
+
+    def get_user_classrooms(self, user_id: str) -> list:
+        """
+        Retrieve all classrooms associated with a specific user.
+
+        Behaves dynamically based on user role, returning managed classes for 
+        teachers and enrolled classes for students.
+
+        Parameters
+        ----------
+        user_id : str
+            The target user ID.
+
+        Returns
+        -------
+        list
+            A list of dictionaries containing class_id and class_name.
+        """
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute("SELECT role FROM Users WHERE user_id = ?", (user_id,))
+        role_row = cursor.fetchone()
+        if not role_row:
+            return []
+        role = role_row[0]
+        
+        if role in ['teacher', 'admin']:
+            cursor.execute("SELECT class_id, class_name FROM Classroom WHERE teacher_id = ?", (user_id,))
+        else:
+            cursor.execute('''
+                SELECT c.class_id, c.class_name 
+                FROM Classroom c
+                JOIN Class_Student_Mapping csm ON c.class_id = csm.class_id
+                WHERE csm.student_id = ?
+            ''', (user_id,))
+        results = cursor.fetchall()
+        conn.close()
+        return [{"class_id": r[0], "class_name": r[1]} for r in results]
+
+    def get_classroom_problemsets(self, class_id: str) -> list:
+        """
+        Retrieve all problem sets assigned to a specific classroom.
+
+        Parameters
+        ----------
+        class_id : str
+            The unique identifier of the classroom.
+
+        Returns
+        -------
+        list
+            A list of dictionaries containing problemset_id and title.
+        """
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT p.problemset_id, p.title
+            FROM Problemsets p
+            JOIN Class_Problemset_Mapping cpm ON p.problemset_id = cpm.problemset_id
+            WHERE cpm.class_id = ?
+        ''', (class_id,))
+        results = cursor.fetchall()
+        conn.close()
+        return [{"problemset_id": r[0], "title": r[1]} for r in results]
+        
+    def get_problemset_problems(self, problemset_id: str) -> list:
+        """
+        Retrieve all problems included within a specific problem set.
+
+        Parameters
+        ----------
+        problemset_id : str
+            The unique identifier of the problem set.
+
+        Returns
+        -------
+        list
+            A list of dictionaries containing problem_id and title.
+        """
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT p.problem_id, p.title 
+            FROM Problems p
+            JOIN Problemset_Mapping pm ON p.problem_id = pm.problem_id
+            WHERE pm.problemset_id = ?
+        ''', (problemset_id,))
+        results = cursor.fetchall()
+        conn.close()
+        return [{"problem_id": r[0], "title": r[1]} for r in results]
 
 if __name__ == "__main__":
     init_db()

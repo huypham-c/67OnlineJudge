@@ -1,11 +1,17 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 import datetime
 import asyncio
 import time
-from typing import Optional
+import os
+import shutil
+import zipfile
+import json
+import tempfile
+import sqlite3
+from typing import Optional, List, Dict
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
@@ -16,6 +22,17 @@ from core.libs import PriorityQueue, BST
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    Manage the lifecycle of the FastAPI application.
+
+    Starts the background worker for judging submissions upon startup 
+    and gracefully cancels it during shutdown.
+
+    Parameters
+    ----------
+    app : FastAPI
+        The FastAPI application instance.
+    """
     worker_task = asyncio.create_task(background_judge_worker())
     print("Background worker activated!")
     
@@ -24,7 +41,7 @@ async def lifespan(app: FastAPI):
     print("Stopping server")
     worker_task.cancel()
 
-app = FastAPI(title="67", lifespan=lifespan)
+app = FastAPI(title="67 Online Judge", lifespan=lifespan)
 
 SECRET_KEY = "something"
 ALGORITHM = "HS256"
@@ -50,6 +67,22 @@ class SubmitCodeRequest(BaseModel):
     source_code: str
     language: str
     problemset_id: str
+
+class TestCaseManual(BaseModel):
+    input: str
+    output: str
+    hidden: bool
+
+class ProblemManualRequest(BaseModel):
+    title: str
+    description: str
+    allowed_langs: List[str]
+    time_limits: Dict[str, float]
+    mem_limits: Dict[str, int]
+    test_cases: List[TestCaseManual]
+
+class AssignProblemsRequest(BaseModel):
+    problem_ids: List[str]
 
 
 def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
@@ -105,7 +138,12 @@ def create_access_token(data: dict) -> str:
 
 
 async def background_judge_worker():
+    """
+    Process code submissions continuously in the background.
 
+    Pops pending submissions from the priority queue and evaluates them 
+    asynchronously using the judge engine, then saves the result.
+    """
     loop = asyncio.get_running_loop()
     
     while True:
@@ -162,6 +200,132 @@ async def login(request: LoginRequest) -> dict:
     }
 
 
+@app.post("/problems/create/manual")
+async def create_problem_manual(
+    request: ProblemManualRequest,
+    user_id: str = Depends(get_current_user_id)
+) -> dict:
+    """
+    Create a new problem manually using raw data.
+
+    Parameters
+    ----------
+    request : ProblemManualRequest
+        The payload containing problem constraints, description, and test cases.
+    user_id : str
+        The ID of the authenticated user attempting to create the problem.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the creation status and the new problem ID.
+
+    Raises
+    ------
+    HTTPException
+        If the authenticated user lacks teacher or admin privileges.
+    """
+    user = db.get_user(user_id)
+    if user.__class__.__name__.lower() == 'student':
+        raise HTTPException(status_code=403, detail="Only teachers can create problems")
+
+    problem = user.create_problem(
+        title=request.title,
+        description="Stored in file",
+        time_limits=request.time_limits,
+        mem_limits=request.mem_limits,
+        allowed_langs=request.allowed_langs
+    )
+
+    formatted_tc = [(tc.input, tc.output) for tc in request.test_cases]
+    banned_words = ["os.system", "subprocess", "eval", "exec"]
+    
+    problem.save_problem_data(
+        html_content=request.description,
+        testcases=formatted_tc,
+        banned_words=banned_words
+    )
+    
+    db.save_problem(problem)
+    return {"status": "success", "message": "Problem created successfully", "problem_id": problem.problem_id}
+
+
+@app.post("/problems/create/zip")
+async def create_problem_zip(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id)
+) -> dict:
+    """
+    Import a problem directly from a compressed ZIP archive.
+
+    Extracts metadata and test cases from the ZIP file to construct 
+    and save the problem structure automatically.
+
+    Parameters
+    ----------
+    file : UploadFile
+        The uploaded ZIP file containing problem data.
+    user_id : str
+        The ID of the authenticated user performing the import.
+
+    Returns
+    -------
+    dict
+        A status payload indicating successful import alongside the problem ID.
+    """
+    user = db.get_user(user_id)
+    if user.__class__.__name__.lower() == 'student':
+        raise HTTPException(status_code=403, detail="Only teachers can create problems")
+        
+    if not file.filename.endswith('.zip'):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload a ZIP file.")
+
+    temp_dir = tempfile.mkdtemp()
+    zip_path = os.path.join(temp_dir, file.filename)
+    
+    try:
+        with open(zip_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        extract_dir = os.path.join(temp_dir, "extracted")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_dir)
+
+        metadata_path = os.path.join(extract_dir, "metadata.json")
+        if not os.path.exists(metadata_path):
+            raise HTTPException(status_code=400, detail="metadata.json not found inside the ZIP file")
+            
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            metadata = json.load(f)
+
+        problem = user.create_problem(
+            title=metadata.get("title", "Imported Problem"),
+            description="Stored in file",
+            time_limits=metadata.get("time_limits", {"python": 2.0, "cpp": 1.0}),
+            mem_limits=metadata.get("mem_limits", {"python": 512, "cpp": 256}),
+            allowed_langs=metadata.get("allowed_langs", ["python", "cpp"])
+        )
+
+        problem.folder_path = os.path.join("data", "problems", problem.problem_id)
+        os.makedirs(problem.folder_path, exist_ok=True)
+        
+        for item in os.listdir(extract_dir):
+            if item != "metadata.json":
+                s = os.path.join(extract_dir, item)
+                d = os.path.join(problem.folder_path, item)
+                if os.path.isdir(s):
+                    shutil.copytree(s, d, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(s, d)
+                    
+        db.save_problem(problem)
+        
+    finally:
+        shutil.rmtree(temp_dir)
+        
+    return {"status": "success", "message": "ZIP Problem imported successfully", "problem_id": problem.problem_id}
+
+
 @app.post("/problems/{problem_id}/submit")
 async def submit_code(
     problem_id: str,
@@ -184,7 +348,7 @@ async def submit_code(
     if request.language not in problem.allowed_langs:
         raise HTTPException(status_code=400, detail=f"{request.language} is not allowed")
 
-    banned_words = ["os.system", "subprocess", "eval", "exec", "open", "__import__"]
+    banned_words = problem.get_banned_words()
     for word in banned_words:
         if word in request.source_code:
             raise HTTPException(status_code=403, detail=f"Found banned keyword: {word} in the submission")
@@ -212,8 +376,20 @@ async def submit_code(
 @app.get("/problemsets/{problemset_id}/leaderboard")
 async def get_leaderboard(problemset_id: str) -> dict:
     """
-    Extract scores from database and utilize the custom Red-Black Tree 
-    to generate a perfectly balanced descending leaderboard.
+    Retrieve the current leaderboard for a specific problem set.
+
+    Utilizes the custom Red-Black Tree (BST) to efficiently sort and 
+    balance the highest scores of the participants.
+
+    Parameters
+    ----------
+    problemset_id : str
+        The unique identifier of the problem set.
+
+    Returns
+    -------
+    dict
+        A structured response containing the ranked user list and scores.
     """
     raw_scores = db.get_problemset_scores(problemset_id)
     def comparator(a: tuple, b: tuple) -> bool:
@@ -243,3 +419,123 @@ async def get_leaderboard(problemset_id: str) -> dict:
         "problemset_id": problemset_id,
         "leaderboard": response_data
     }
+
+@app.get("/users/me/classrooms")
+async def get_my_classrooms(user_id: str = Depends(get_current_user_id)) -> dict:
+    classes = db.get_user_classrooms(user_id)
+    return {"classrooms": classes}
+
+@app.get("/classrooms/{class_id}/problemsets")
+async def get_classroom_problemsets(class_id: str, user_id: str = Depends(get_current_user_id)) -> dict:
+    sets = db.get_classroom_problemsets(class_id)
+    return {"problemsets": sets}
+
+@app.get("/problemsets/{problemset_id}/problems")
+async def get_problemset_problems(problemset_id: str, user_id: str = Depends(get_current_user_id)) -> dict:
+    probs = db.get_problemset_problems(problemset_id)
+    return {"problems": probs}
+
+@app.get("/problems/{problem_id}")
+async def get_problem_details(problem_id: str, user_id: str = Depends(get_current_user_id)) -> dict:
+    problem = db.get_problem(problem_id)
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+    
+    description_html = problem.description
+    desc_path = os.path.join(problem.folder_path, "description.html")
+    if os.path.exists(desc_path):
+        with open(desc_path, "r", encoding="utf-8") as f:
+            description_html = f.read()
+
+    return {
+        "problem_id": problem.problem_id,
+        "title": problem.title,
+        "description": description_html,
+        "time_limits": problem.time_limits,
+        "mem_limits": problem.mem_limits,
+        "allowed_langs": problem.allowed_langs
+    }
+
+@app.get("/submissions/{submission_id}")
+async def check_submission_status(submission_id: str) -> dict:
+    sub_data = db.get_submission(submission_id)
+    if not sub_data:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    
+    return sub_data
+
+
+@app.get("/problems")
+async def get_all_problems(user_id: str = Depends(get_current_user_id)):
+    """
+    Fetch a summarized list of all available problems in the system.
+
+    This endpoint is strictly restricted to teachers and administrators 
+    for problem assignment operations.
+
+    Parameters
+    ----------
+    user_id : str
+        The authenticated user's ID injected by the dependency.
+
+    Returns
+    -------
+    dict
+        A structured list mapping problem IDs to their respective titles.
+    """
+    user = db.get_user(user_id)
+    if user.__class__.__name__.lower() not in ['teacher', 'admin']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    conn = sqlite3.connect(db.db_name)
+    cursor = conn.cursor()
+    cursor.execute("SELECT problem_id, title FROM Problems ORDER BY created_at DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    return {"problems": [{"problem_id": r[0], "title": r[1]} for r in rows]}
+
+@app.post("/problemsets/{problemset_id}/assign")
+async def assign_problems_to_set(
+    problemset_id: str, 
+    request: AssignProblemsRequest, 
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Safely append a batch of problems to an existing problem set.
+
+    Parameters
+    ----------
+    problemset_id : str
+        The ID of the target problem set.
+    request : AssignProblemsRequest
+        A JSON payload containing the list of problem IDs to append.
+    user_id : str
+        The ID of the authenticated user initiating the assignment.
+
+    Returns
+    -------
+    dict
+        A confirmation dictionary indicating the number of appended problems.
+    """
+    user = db.get_user(user_id)
+    if user.__class__.__name__.lower() not in ['teacher', 'admin']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    problemset = db.get_problemset(problemset_id)
+    if not problemset:
+        raise HTTPException(status_code=404, detail="Problemset not found")
+        
+    conn = sqlite3.connect(db.db_name)
+    cursor = conn.cursor()
+    cursor.execute("SELECT problem_id FROM Problemset_Mapping WHERE problemset_id = ?", (problemset_id,))
+    existing_ids = [r[0] for r in cursor.fetchall()]
+    conn.close()
+    
+    for pid in existing_ids:
+        problemset.add_problem(pid)
+    for pid in request.problem_ids:
+        problemset.add_problem(pid)
+        
+    db.save_problemset(problemset)
+    return {"status": "success", "message": f"Assigned {len(request.problem_ids)} problems to set"}

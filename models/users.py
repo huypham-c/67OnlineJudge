@@ -73,6 +73,9 @@ class User:
 class Student(User):
     """
     Class representing a student user, inherited from User.
+
+    Students are the primary consumers of problems and problem sets. 
+    They can be enrolled in multiple classrooms.
     """
 
     def __init__(self, user_id: str, username: str, password_hash: str):
@@ -84,6 +87,9 @@ class Teacher(User):
     """
     Class representing a teacher user with administrative privileges over courses.
     Inherited from User.
+
+    Teachers have the authority to create problems, assemble problem sets, 
+    and manage their own classrooms.
     """
 
     def create_classroom(self, class_name: str) -> 'Classroom':
@@ -184,6 +190,9 @@ class Admin(Teacher):
     """
     Class representing a system administrator with full access.
     Inherited from Teacher.
+
+    Admins inherit all teacher capabilities but also have the authority 
+    to create and manage user accounts globally.
     """
 
     def create_user_account(self, role: str, username: str, raw_password: str) -> User:
