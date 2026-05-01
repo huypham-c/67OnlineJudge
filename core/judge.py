@@ -4,7 +4,7 @@ import subprocess
 import tempfile
 import shutil
 from typing import Dict, Any
-from problems import Submission, Problem
+from models.problems import Submission, Problem
 
 class JudgeEngine:
     """

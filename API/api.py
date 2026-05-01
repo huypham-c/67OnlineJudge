@@ -9,10 +9,10 @@ from typing import Optional
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
-from database import DatabaseManager
-from users import User
-from judge import JudgeEngine
-from libs import PriorityQueue, BST
+from db.database import DatabaseManager
+from models.users import User
+from core.judge import JudgeEngine
+from core.libs import PriorityQueue, BST
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -145,7 +145,7 @@ async def login(request: LoginRequest) -> dict:
         If the user is not found or the password is incorrect.
     """
     user = db.get_user_by_username(request.username)
-    
+
     if not user:
         raise HTTPException(status_code=404, detail="Username not found")
     

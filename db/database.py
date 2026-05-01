@@ -1,11 +1,14 @@
 import sqlite3
 import json
 import hashlib
+import os
 from typing import Dict, Any, List, Optional
-from problems import Submission, Problemset, Problem
-from users import User, Classroom
+from models.problems import Submission, Problemset, Problem
+from models.users import User, Classroom
 
-def init_db(db_name: str = "judge.db"):
+DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'judge.db')
+
+def init_db(db_name: str = DEFAULT_DB_PATH):
     """
     Initialize the SQLite database and create the core tables.
 
@@ -144,7 +147,7 @@ class DatabaseManager:
         The path to the SQLite database file. Defaults to 'judge.db'.
     """
 
-    def __init__(self, db_name: str = "judge.db"):
+    def __init__(self, db_name: str = DEFAULT_DB_PATH):
         self.db_name = db_name
 
     def _execute_query(self, query: str, params: tuple = ()) -> None:
@@ -192,13 +195,13 @@ class DatabaseManager:
         if not row: return None
         uid, uname, pwd_hash, role = row
         if role == 'student':
-            from users import Student
+            from models.users import Student
             return Student(user_id=uid, username=uname, password_hash=pwd_hash)
         elif role == 'teacher':
-            from users import Teacher
+            from models.users import Teacher
             return Teacher(user_id=uid, username=uname, password_hash=pwd_hash)
         elif role == 'admin':
-            from users import Admin
+            from models.users import Admin
             return Admin(user_id=uid, username=uname, password_hash=pwd_hash)
         return User(user_id=uid, username=uname, password_hash=pwd_hash)
 
@@ -225,13 +228,13 @@ class DatabaseManager:
         if not row: return None
         uid, uname, pwd_hash, role = row
         if role == 'student':
-            from users import Student
+            from models.users import Student
             return Student(user_id=uid, username=uname, password_hash=pwd_hash)
         elif role == 'teacher':
-            from users import Teacher
+            from models.users import Teacher
             return Teacher(user_id=uid, username=uname, password_hash=pwd_hash)
         elif role == 'admin':
-            from users import Admin
+            from models.users import Admin
             return Admin(user_id=uid, username=uname, password_hash=pwd_hash)
         return User(user_id=uid, username=uname, password_hash=pwd_hash)
 

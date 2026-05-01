@@ -2,7 +2,7 @@ import datetime
 import hashlib
 import uuid
 from typing import Set, List
-from problems import Submission, Problem, Problemset
+from models.problems import Submission, Problem, Problemset
 
 class User:
     """
