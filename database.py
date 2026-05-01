@@ -391,5 +391,48 @@ class DatabaseManager:
             allowed_lang=json.loads(row[4])
         )
 
+    def get_problemset(self, problemset_id: str) -> Problem:
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute("SELECT problemset_id, title, set_type, start_time, end_time FROM Problemsets WHERE problemset_id = ?", (problemset_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return None
+            
+        return Problemset(
+            problemset_id=row[0],
+            title=row[1],
+            start_time=row[3],
+            end_time=row[4],
+            set_type=row[2]
+        )
+    
+    def get_problemset_scores(self, problemset_id: str) -> list:
+        """
+        Fetch the highest score per user for a specific problem set.
+        Returns a list of tuples containing (user_id, total_score).
+        """
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        
+        query = '''
+            SELECT user_id, SUM(max_passed) as total_score
+            FROM (
+                SELECT user_id, problem_id, MAX(passed_cases) as max_passed
+                FROM Submissions
+                WHERE problemset_id = ?
+                GROUP BY user_id, problem_id
+            )
+            GROUP BY user_id
+        '''
+        
+        cursor.execute(query, (problemset_id,))
+        results = cursor.fetchall()
+        conn.close()
+        
+        return results
+
 if __name__ == "__main__":
     init_db()

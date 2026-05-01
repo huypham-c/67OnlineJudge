@@ -3,19 +3,54 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 import datetime
+import asyncio
+import time
 from typing import Optional
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 
 from database import DatabaseManager
 from users import User
 from judge import JudgeEngine
+from libs import PriorityQueue, BST
 
-app = FastAPI(title="67")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    worker_task = asyncio.create_task(background_judge_worker())
+    print("Background worker activated!")
+    
+    yield
+    
+    print("Stopping server")
+    worker_task.cancel()
+
+app = FastAPI(title="67", lifespan=lifespan)
 
 SECRET_KEY = "something"
 ALGORITHM = "HS256"
 
 security = HTTPBearer()
+db = DatabaseManager()
+
+submission_queue = PriorityQueue()
+judge = JudgeEngine()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+    
+class SubmitCodeRequest(BaseModel):
+    source_code: str
+    language: str
+    problemset_id: str
+
 
 def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     """
@@ -48,45 +83,6 @@ def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(secu
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Can not validate token")
 
-db = DatabaseManager()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-class LoginRequest(BaseModel):
-    """
-    Pydantic model representing the expected body for login requests.
-    
-    Parameters
-    ----------
-    username : str
-        The user's login name.
-    password : str
-        The user's plain text password.
-    """
-    username: str
-    password: str
-    
-class SubmitCodeRequest(BaseModel):
-    """
-    Pydantic model representing the expected body for submission request.
-    
-    Parameters
-    ----------
-    source_code : str
-        The source code to submit.
-    language : str
-        The language the source code is in.
-    problemset_id : str
-        The id of the problemset the submission is for.
-    """
-    source_code: str
-    language: str
-    problemset_id: str
 
 def create_access_token(data: dict) -> str:
     """
@@ -106,6 +102,26 @@ def create_access_token(data: dict) -> str:
     expire = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+async def background_judge_worker():
+
+    loop = asyncio.get_running_loop()
+    
+    while True:
+        if len(submission_queue) > 0:
+            priority, submission, problem, problemset_id = submission_queue.pop()
+            
+            result = await loop.run_in_executor(
+                None, 
+                judge.evaluate_submission, 
+                submission, 
+                problem
+            )
+            
+            db.save_submission(submission, result, problemset_id)
+        else:
+            await asyncio.sleep(2)
 
 
 @app.post("/login")
@@ -146,26 +162,6 @@ async def login(request: LoginRequest) -> dict:
     }
 
 
-@app.get("/me")
-async def get_my_profile(user_id: str = Depends(get_current_user_id)) -> dict:
-    """
-    Retrieve the basic profile information of the currently authenticated user.
-
-    Parameters
-    ----------
-    user_id : str
-        The ID of the user, automatically injected by the token dependency.
-
-    Returns
-    -------
-    dict
-        A success message including the authenticated user's ID.
-    """
-    return {
-        "status": "success",
-        "message": "Token validation successful!",
-        "your_user_id_is": user_id
-    }
 @app.post("/problems/{problem_id}/submit")
 async def submit_code(
     problem_id: str,
@@ -184,17 +180,14 @@ async def submit_code(
     
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
-
+    
     if request.language not in problem.allowed_langs:
         raise HTTPException(status_code=400, detail=f"{request.language} is not allowed")
 
     banned_words = ["os.system", "subprocess", "eval", "exec", "open", "__import__"]
     for word in banned_words:
         if word in request.source_code:
-            raise HTTPException(
-                status_code=403, 
-                detail=f"Found banned keyword: {word} in the submission"
-            )
+            raise HTTPException(status_code=403, detail=f"Found banned keyword: {word} in the submission")
 
     submission = user.submit_code(
         problem_id=problem.problem_id,
@@ -202,17 +195,51 @@ async def submit_code(
         language=request.language
     )
 
-    judge = JudgeEngine()
-    result = judge.evaluate_submission(submission, problem)
+    db.save_submission(submission, {"verdict": "Pending", "time_used": 0.0}, request.problemset_id)
 
-    db.save_submission(submission, result, request.problemset_id)
+    problemset = db.get_problemset(request.problemset_id)
+    set_type = problemset.set_type
+    priority_score = time.time() * -1 + 100 if set_type == "contest" else 0
+    submission_queue.insert((priority_score, submission, problem, request.problemset_id))
 
     return {
         "status": "success",
-        "submission_id": submission.submission_id,
-        "verdict": result["verdict"],
-        "execution_time": result["time_used"],
-        "passed_cases": result["passed_cases"],
-        "total_cases": result.get("total_cases", 0),
-        "details": result.get("details", [])
+        "message": "Submission received and queued for grading.",
+        "submission_id": submission.submission_id
+    }
+
+
+@app.get("/problemsets/{problemset_id}/leaderboard")
+async def get_leaderboard(problemset_id: str) -> dict:
+    """
+    Extract scores from database and utilize the custom Red-Black Tree 
+    to generate a perfectly balanced descending leaderboard.
+    """
+    raw_scores = db.get_problemset_scores(problemset_id)
+    def comparator(a: tuple, b: tuple) -> bool:
+        if a[0] == b[0]:
+            return a[1] > b[1] 
+        return a[0] < b[0]
+    
+    leaderboard_tree = BST(comparator=comparator)
+    
+    for user_id, score in raw_scores:
+        leaderboard_tree.insert((score, user_id))
+        
+    sorted_elements = leaderboard_tree.get_sorted_elements()
+    
+    response_data = []
+    for rank, (score, uid) in enumerate(sorted_elements, start=1):
+        user_info = db.get_user(uid)
+        username = user_info.username if user_info else "Unknown User"
+        
+        response_data.append({
+            "rank": rank,
+            "username": username,
+            "score": score
+        })
+        
+    return {
+        "problemset_id": problemset_id,
+        "leaderboard": response_data
     }
