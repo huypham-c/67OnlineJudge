@@ -84,12 +84,20 @@ function setupWorkspace() {
 
     // Apply Role-Based Access Control (RBAC)
     const adminElements = document.querySelectorAll('.admin-only');
+    const superAdminElements = document.querySelectorAll('.super-admin-only');
+    
     if (currentUser.role === 'teacher' || currentUser.role === 'admin') {
         adminElements.forEach(el => el.classList.remove('hidden'));
-        addTestCase(); // Prepare manual builder if teacher
+        addTestCase(); 
         loadAllProblemsForAssign();
     } else {
         adminElements.forEach(el => el.classList.add('hidden'));
+    }
+    if (currentUser.role === 'admin') {
+        superAdminElements.forEach(el => el.classList.remove('hidden'));
+        loadAllUsersForAdmin();
+    } else {
+        superAdminElements.forEach(el => el.classList.add('hidden'));
     }
     
     switchTab('tab-overview');
@@ -551,4 +559,124 @@ async function submitAssignProblems() {
             alert(`❌ Error: ${data.detail}`);
         }
     } catch (err) { alert(`Network error: ${err}`); }
+}
+
+async function handleCreateClass() {
+    const className = document.getElementById('create-class-name').value;
+    if (!className.trim()) return alert("Class name cannot be empty.");
+
+    try {
+        const res = await fetch(`${API_URL}/classrooms`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${currentUser.token}`
+            },
+            body: JSON.stringify({ class_name: className, student_ids: [] })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            alert(`✅ ${data.message} (ID: ${data.class_id})`);
+            document.getElementById('create-class-name').value = '';
+            loadClassrooms(); // Refresh dropdowns
+        } else {
+            alert(`❌ Error: ${data.detail}`);
+        }
+    } catch (err) { alert(`Network Error: ${err}`); }
+}
+
+async function handleCreateProblemset() {
+    const title = document.getElementById('create-ps-title').value;
+    const startStr = document.getElementById('create-ps-start').value;
+    const endStr = document.getElementById('create-ps-end').value;
+
+    if (!title || !startStr || !endStr) return alert("Please fill all fields.");
+
+    // Format for Python ISO from HTML datetime-local picker
+    const startTime = new Date(startStr).toISOString();
+    const endTime = new Date(endStr).toISOString();
+
+    try {
+        const res = await fetch(`${API_URL}/problemsets`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${currentUser.token}`
+            },
+            body: JSON.stringify({
+                title: title,
+                description: "Created via Admin Panel",
+                start_time: startTime,
+                end_time: endTime,
+                problem_ids: []
+            })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            alert(`✅ ${data.message} (ID: ${data.problemset_id})`);
+            document.getElementById('create-ps-title').value = '';
+            document.getElementById('create-ps-start').value = '';
+            document.getElementById('create-ps-end').value = '';
+        } else {
+            alert(`❌ Error: ${data.detail}`);
+        }
+    } catch (err) { alert(`Network Error: ${err}`); }
+}
+
+async function loadAllUsersForAdmin() {
+    try {
+        const res = await fetch(`${API_URL}/users`, {
+            headers: { 'Authorization': `Bearer ${currentUser.token}` }
+        });
+        const data = await res.json();
+        const tbody = document.getElementById('admin-user-list');
+        
+        if (res.ok && data.users) {
+            tbody.innerHTML = data.users.map(u => `
+                <tr class="bg-white border-b hover:bg-gray-50 transition">
+                    <td class="px-6 py-4 font-mono text-xs text-gray-500">${u.user_id.substring(0,8)}...</td>
+                    <td class="px-6 py-4 font-bold text-gray-900">${u.username}</td>
+                    <td class="px-6 py-4">
+                        <span class="px-2 py-1 rounded text-xs font-semibold uppercase tracking-wider
+                            ${u.role === 'admin' ? 'bg-red-100 text-red-800' : (u.role === 'teacher' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800')}">
+                            ${u.role}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <select onchange="updateUserRole('${u.user_id}', this.value)" class="border rounded p-1 text-sm bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">
+                            <option value="student" ${u.role === 'student' ? 'selected' : ''}>Set Student</option>
+                            <option value="teacher" ${u.role === 'teacher' ? 'selected' : ''}>Set Teacher</option>
+                            <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Set Admin</option>
+                        </select>
+                    </td>
+                </tr>
+            `).join('');
+        }
+    } catch (err) { console.error("Failed to fetch user list", err); }
+}
+
+async function updateUserRole(userId, newRole) {
+    if (!confirm(`Are you sure you want to change this user's role to ${newRole.toUpperCase()}?`)) {
+        loadAllUsersForAdmin(); // Revert select box visually if cancelled
+        return;
+    }
+    
+    try {
+        const res = await fetch(`${API_URL}/users/role`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${currentUser.token}`
+            },
+            body: JSON.stringify({ user_id: userId, new_role: newRole })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+            loadAllUsersForAdmin(); // Refresh list to see badge change
+        } else {
+            alert(`❌ Error: ${data.detail}`);
+            loadAllUsersForAdmin(); 
+        }
+    } catch (err) { alert(`Network Error: ${err}`); }
 }

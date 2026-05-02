@@ -84,6 +84,20 @@ class ProblemManualRequest(BaseModel):
 class AssignProblemsRequest(BaseModel):
     problem_ids: List[str]
 
+class CreateClassroomRequest(BaseModel):
+    class_name: str
+    student_ids: List[str] = []
+
+class CreateProblemsetRequest(BaseModel):
+    title: str
+    description: str
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+    problem_ids: List[str] = []
+
+class UpdateUserRoleRequest(BaseModel):
+    user_id: str
+    new_role: str
 
 def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     """
@@ -539,3 +553,168 @@ async def assign_problems_to_set(
         
     db.save_problemset(problemset)
     return {"status": "success", "message": f"Assigned {len(request.problem_ids)} problems to set"}
+
+@app.post("/classrooms")
+async def create_classroom(
+    request: CreateClassroomRequest,
+    user_id: str = Depends(get_current_user_id)
+) -> dict:
+    """
+    Create a new classroom.
+
+    This endpoint is restricted to teachers and administrators. It initializes
+    a new classroom and optionally enrolls a list of student IDs.
+
+    Parameters
+    ----------
+    request : CreateClassroomRequest
+        The payload containing the classroom name and an optional list of student IDs.
+    user_id : str
+        The ID of the authenticated user creating the classroom.
+
+    Returns
+    -------
+    dict
+        A status dictionary containing the success message and the new classroom ID.
+
+    Raises
+    ------
+    HTTPException
+        If the authenticated user lacks teacher or admin privileges.
+    """
+    user = db.get_user(user_id)
+    if user.__class__.__name__.lower() not in ['teacher', 'admin']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    classroom = user.create_classroom(request.class_name)
+    for student_id in request.student_ids:
+        classroom.add_student(student_id)
+        
+    db.save_classroom(classroom)
+    return {"status": "success", "message": "Classroom created", "class_id": classroom.class_id}
+
+@app.post("/problemsets")
+async def create_problemset(
+    request: CreateProblemsetRequest,
+    user_id: str = Depends(get_current_user_id)
+) -> dict:
+    """
+    Create a new problem set or contest.
+
+    This endpoint allows teachers and administrators to group problems into
+    a specific set with defined start and end times.
+
+    Parameters
+    ----------
+    request : CreateProblemsetRequest
+        The payload containing the title, description, time bounds, and problem IDs.
+    user_id : str
+        The ID of the authenticated user creating the problem set.
+
+    Returns
+    -------
+    dict
+        A status dictionary containing the success message and the new problemset ID.
+
+    Raises
+    ------
+    HTTPException
+        If the authenticated user lacks teacher or admin privileges.
+    """
+    user = db.get_user(user_id)
+    if user.__class__.__name__.lower() not in ['teacher', 'admin']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    problemset = user.create_problem_set(
+        title=request.title,
+        description=request.description,
+        problemset=request.problem_ids,
+        start_time=request.start_time,
+        end_time=request.end_time
+    )
+    
+    db.save_problemset(problemset)
+    return {"status": "success", "message": "Problem set created", "problemset_id": problemset.problemset_id}
+
+@app.get("/users")
+async def get_all_users(user_id: str = Depends(get_current_user_id)) -> dict:
+    """
+    Retrieve a list of all registered users in the system.
+
+    This endpoint is strictly restricted to administrators for system management
+    and role assignment purposes.
+
+    Parameters
+    ----------
+    user_id : str
+        The ID of the authenticated user requesting the list.
+
+    Returns
+    -------
+    dict
+        A dictionary containing a list of user details including ID, username, and role.
+
+    Raises
+    ------
+    HTTPException
+        If the authenticated user is not an administrator.
+    """
+    user = db.get_user(user_id)
+    if user.__class__.__name__.lower() != 'admin':
+        raise HTTPException(status_code=403, detail="Admin access required")
+        
+    conn = sqlite3.connect(db.db_name)
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, username, role FROM Users ORDER BY username")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    return {"users": [{"user_id": r[0], "username": r[1], "role": r[2]} for r in rows]}
+
+@app.post("/users/role")
+async def update_user_role(
+    request: UpdateUserRoleRequest,
+    user_id: str = Depends(get_current_user_id)
+) -> dict:
+    """
+    Update the system role of a specific user.
+
+    This endpoint allows administrators to promote or demote users between
+    student, teacher, and admin roles.
+
+    Parameters
+    ----------
+    request : UpdateUserRoleRequest
+        The payload specifying the target user ID and their new role.
+    user_id : str
+        The ID of the authenticated administrator making the change.
+
+    Returns
+    -------
+    dict
+        A status dictionary confirming the role update.
+
+    Raises
+    ------
+    HTTPException
+        If the authenticated user is not an administrator, if the specified role
+        is invalid, or if the target user is not found.
+    """
+    admin = db.get_user(user_id)
+    if admin.__class__.__name__.lower() != 'admin':
+        raise HTTPException(status_code=403, detail="Admin access required")
+        
+    if request.new_role not in ['student', 'teacher', 'admin']:
+        raise HTTPException(status_code=400, detail="Invalid role specified")
+        
+    conn = sqlite3.connect(db.db_name)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE Users SET role = ? WHERE user_id = ?", (request.new_role, request.user_id))
+    conn.commit()
+    
+    if cursor.rowcount == 0:
+        conn.close()
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    conn.close()
+    return {"status": "success", "message": f"User role updated to {request.new_role}"}

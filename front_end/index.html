@@ -19,11 +19,11 @@
             <div class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Username</label>
-                    <input type="text" id="login-username" class="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none" value="alice">
+                    <input type="text" id="login-username" class="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Password</label>
-                    <input type="password" id="login-password" class="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none" value="123456">
+                    <input type="password" id="login-password" class="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
                 <button onclick="handleLogin()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700 transition">Login</button>
                 <div id="login-error" class="text-red-500 text-sm text-center hidden"></div>
@@ -48,6 +48,8 @@
                             <!-- Restricted Tabs (Hidden for students) -->
                             <button onclick="switchTab('tab-create')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium admin-only hidden" data-target="tab-create">Create Problem</button>
                             <button onclick="switchTab('tab-assign')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium admin-only hidden" data-target="tab-assign">Assign Problems</button>
+                            <button onclick="switchTab('tab-manage')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium admin-only hidden" data-target="tab-manage">Management</button>
+                            <button onclick="switchTab('tab-users')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium super-admin-only hidden" data-target="tab-users">User Control</button>
                         </div>
                     </div>
                     <div class="flex items-center space-x-4">
@@ -213,6 +215,76 @@
                         <button onclick="submitAssignProblems()" class="w-full bg-slate-800 text-white font-bold py-3 rounded hover:bg-slate-700 transition shadow">
                             Add Selected Problems
                         </button>
+                    </div>
+                </div>
+            </div>
+        <!-- TAB: General Management (Create Class & Problemset) -->
+            <div id="tab-manage" class="tab-content hidden">
+                <h1 class="text-3xl font-bold mb-6 text-slate-800">Class & Problemset Management</h1>
+                <div class="grid grid-cols-2 gap-6">
+                    
+                    <!-- Create Class Card -->
+                    <div class="bg-white p-6 rounded-lg shadow border border-gray-100">
+                        <h2 class="text-xl font-bold mb-4 text-slate-800 border-b pb-2">Create New Classroom</h2>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Class Name</label>
+                                <input type="text" id="create-class-name" placeholder="e.g., Data Structures Fall 2026" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                            </div>
+                            <button onclick="handleCreateClass()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700 transition">Create Classroom</button>
+                        </div>
+                    </div>
+
+                    <!-- Create Problemset Card -->
+                    <div class="bg-white p-6 rounded-lg shadow border border-gray-100">
+                        <h2 class="text-xl font-bold mb-4 text-slate-800 border-b pb-2">Create Problemset</h2>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                                <input type="text" id="create-ps-title" placeholder="e.g., Midterm Exam" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                                    <input type="datetime-local" id="create-ps-start" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                                    <input type="datetime-local" id="create-ps-end" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                                </div>
+                            </div>
+                            <button onclick="handleCreateProblemset()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700 transition">Create Problemset</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: User Control (Strictly Admin) -->
+            <div id="tab-users" class="tab-content hidden">
+                <h1 class="text-3xl font-bold mb-6 text-slate-800">User Control Panel</h1>
+                <div class="bg-white p-6 rounded-lg shadow border border-gray-100">
+                    <div class="flex justify-between items-center mb-4">
+                        <p class="text-gray-600 text-sm">Manage roles and permissions for all registered users across the system.</p>
+                        <button onclick="loadAllUsersForAdmin()" class="bg-slate-800 text-white text-sm px-4 py-2 rounded hover:bg-slate-700">Refresh List</button>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm text-gray-600">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-100 border-b">
+                                <tr>
+                                    <th class="px-6 py-3">User ID</th>
+                                    <th class="px-6 py-3">Username</th>
+                                    <th class="px-6 py-3">Current Role</th>
+                                    <th class="px-6 py-3 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-user-list">
+                                <!-- User rows will be injected here -->
+                                <tr>
+                                    <td colspan="4" class="px-6 py-4 text-center italic text-gray-500">Loading user data...</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
