@@ -59,21 +59,75 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ================= DATA MODELS (PYDANTIC) =================
+
 class LoginRequest(BaseModel):
+    """
+    Payload for user authentication.
+
+    Parameters
+    ----------
+    username : str
+        The registered username of the user.
+    password : str
+        The plain text password for verification.
+    """
     username: str
     password: str
     
 class SubmitCodeRequest(BaseModel):
+    """
+    Payload for submitting a code solution to a specific problem.
+
+    Parameters
+    ----------
+    source_code : str
+        The raw source code written by the user.
+    language : str
+        The programming language used (e.g., 'python', 'cpp').
+    problemset_id : str
+        The ID of the problem set this submission belongs to.
+    """
     source_code: str
     language: str
     problemset_id: str
 
 class TestCaseManual(BaseModel):
+    """
+    Represent a single test case provided via the manual problem builder.
+
+    Parameters
+    ----------
+    input : str
+        The standard input string for the program.
+    output : str
+        The expected standard output string.
+    hidden : bool
+        Flag indicating if the test case should be hidden from students.
+    """
     input: str
     output: str
     hidden: bool
 
 class ProblemManualRequest(BaseModel):
+    """
+    Payload for creating a new coding problem manually via the admin interface.
+
+    Parameters
+    ----------
+    title : str
+        The display title of the problem.
+    description : str
+        The detailed problem statement in HTML format.
+    allowed_langs : List[str]
+        List of permitted programming languages.
+    time_limits : Dict[str, float]
+        Execution time limits in seconds mapped by language.
+    mem_limits : Dict[str, int]
+        Memory limits in MB mapped by language.
+    test_cases : List[TestCaseManual]
+        A collection of manually defined test cases.
+    """
     title: str
     description: str
     allowed_langs: List[str]
@@ -82,13 +136,47 @@ class ProblemManualRequest(BaseModel):
     test_cases: List[TestCaseManual]
 
 class AssignProblemsRequest(BaseModel):
+    """
+    Payload for assigning multiple problems to an existing problem set.
+
+    Parameters
+    ----------
+    problem_ids : List[str]
+        A list of problem IDs to append to the target problem set.
+    """
     problem_ids: List[str]
 
 class CreateClassroomRequest(BaseModel):
+    """
+    Payload for initializing a new classroom.
+
+    Parameters
+    ----------
+    class_name : str
+        The display name of the classroom.
+    student_ids : List[str], optional
+        An initial list of student IDs to enroll in the class. Defaults to an empty list.
+    """
     class_name: str
     student_ids: List[str] = []
 
 class CreateProblemsetRequest(BaseModel):
+    """
+    Payload for setting up a new problem set or contest.
+
+    Parameters
+    ----------
+    title : str
+        The title of the problem set.
+    description : str
+        Instructions or overview of the problem set.
+    start_time : datetime.datetime
+        The exact time when the problem set becomes active.
+    end_time : datetime.datetime
+        The exact deadline or closing time of the problem set.
+    problem_ids : List[str], optional
+        An initial list of problem IDs to include. Defaults to an empty list.
+    """
     title: str
     description: str
     start_time: datetime.datetime
@@ -96,8 +184,21 @@ class CreateProblemsetRequest(BaseModel):
     problem_ids: List[str] = []
 
 class UpdateUserRoleRequest(BaseModel):
+    """
+    Payload for modifying an existing user's system role.
+
+    Parameters
+    ----------
+    user_id : str
+        The unique identifier of the target user.
+    new_role : str
+        The new role to be assigned (e.g., 'student', 'teacher', 'admin').
+    """
     user_id: str
     new_role: str
+
+
+# ================= ENDPOINTS & LOGIC =================
 
 def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     """
