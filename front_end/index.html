@@ -4,34 +4,65 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>67 Online Judge</title>
-    <!-- Tailwind CSS for styling -->
+    <!-- Tailwind CSS (For structural layout) -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Custom Components CSS -->
+    <link href="style.css" rel="stylesheet">
     <!-- Quill.js for Rich Text Editing -->
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans min-h-screen flex flex-col">
 
-    <!-- LOGIN SCREEN -->
+    <!-- LOGIN / REGISTER SCREEN -->
     <div id="login-screen" class="flex flex-col items-center justify-center min-h-screen">
-        <div class="bg-white p-8 rounded-lg shadow-xl border border-gray-100 w-96">
-            <h1 class="text-3xl font-bold text-center text-slate-800 mb-6">67 OJ Login</h1>
-            <div class="space-y-4">
+        <div class="auth-card">
+            <h1 class="text-3xl font-bold text-center text-slate-800 mb-2">67 OJ System</h1>
+            <p id="auth-subtitle" class="text-center text-gray-500 text-sm mb-6">Please sign in to continue</p>
+            
+            <!-- Login Form -->
+            <div id="login-form" class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Username</label>
-                    <input type="text" id="login-username" class="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none">
+                    <label class="form-label">Username</label>
+                    <input type="text" id="login-username" class="input-base input-blue">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Password</label>
-                    <input type="password" id="login-password" class="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none">
+                    <label class="form-label">Password</label>
+                    <input type="password" id="login-password" class="input-base input-blue">
                 </div>
-                <button onclick="handleLogin()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700 transition">Login</button>
+                <button onclick="handleLogin()" class="btn-base btn-block btn-blue">Login</button>
                 <div id="login-error" class="text-red-500 text-sm text-center hidden"></div>
+                
+                <div class="mt-4 text-center text-sm text-gray-600 border-t pt-4">
+                    <button onclick="toggleAuthMode('register')" class="text-blue-600 font-bold hover:underline outline-none">Register</button>
+                </div>
+            </div>
+
+            <!-- Register Form -->
+            <div id="register-form" class="space-y-4 hidden">
+                <div>
+                    <label class="form-label">Username</label>
+                    <input type="text" id="register-username" class="input-base input-green">
+                </div>
+                <div>
+                    <label class="form-label">Password</label>
+                    <input type="password" id="register-password" placeholder="Min. 6 characters" class="input-base input-green">
+                </div>
+                <div>
+                    <label class="form-label">Confirm Password</label>
+                    <input type="password" id="register-password-repeat" class="input-base input-green">
+                </div>
+                <button onclick="handleRegister()" class="btn-base btn-block btn-green">Create Account</button>
+                
+                <div class="mt-4 text-center text-sm text-gray-600 border-t pt-4">
+                    Already have an account? 
+                    <button onclick="toggleAuthMode('login')" class="text-blue-600 font-bold hover:underline outline-none">Sign in here</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- MAIN DASHBOARD (Hidden by default) -->
+    <!-- MAIN DASHBOARD -->
     <div id="dashboard-screen" class="hidden flex-col min-h-screen">
         <!-- Top Navigation Bar -->
         <nav class="bg-slate-800 text-white shadow-lg">
@@ -45,7 +76,7 @@
                             <button onclick="switchTab('tab-submit')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" data-target="tab-submit">Submit Code</button>
                             <button onclick="switchTab('tab-leaderboard')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" data-target="tab-leaderboard">Leaderboard</button>
                             
-                            <!-- Restricted Tabs (Hidden for students) -->
+                            <!-- Restricted Tabs -->
                             <button onclick="switchTab('tab-create')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium admin-only hidden" data-target="tab-create">Create Problem</button>
                             <button onclick="switchTab('tab-assign')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium admin-only hidden" data-target="tab-assign">Assign Problems</button>
                             <button onclick="switchTab('tab-manage')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium admin-only hidden" data-target="tab-manage">Management</button>
@@ -54,7 +85,7 @@
                     </div>
                     <div class="flex items-center space-x-4">
                         <span id="user-greeting" class="text-sm font-medium text-gray-300"></span>
-                        <button onclick="handleLogout()" class="text-sm bg-red-600 hover:bg-red-700 px-3 py-1 rounded transition">Logout</button>
+                        <button onclick="handleLogout()" class="btn-base btn-danger text-sm px-3 py-1">Logout</button>
                     </div>
                 </div>
             </div>
@@ -65,61 +96,59 @@
 
             <!-- TAB: Overview -->
             <div id="tab-overview" class="tab-content block">
-                <h1 class="text-3xl font-bold mb-6 text-slate-800">System Overview</h1>
-                <div class="bg-white p-6 rounded-lg shadow border border-gray-100">
+                <h1 class="page-title">System Overview</h1>
+                <div class="card-base">
                     <p class="text-gray-600">Welcome to the Online Judge. Select a tab above to get started.</p>
                 </div>
             </div>
 
             <!-- TAB: Submit Code -->
             <div id="tab-submit" class="tab-content hidden">
-                <h1 class="text-3xl font-bold mb-6 text-slate-800">Submit Solution</h1>
-                <div class="bg-white rounded-lg shadow border border-gray-100 grid grid-cols-12 overflow-hidden h-[700px]">
+                <h1 class="page-title">Submit Solution</h1>
+                <div class="card-base p-0 grid grid-cols-12 overflow-hidden h-[700px]">
                     
-                    <!-- Left Panel: Selectors & List -->
+                    <!-- Left Panel -->
                     <div class="col-span-3 bg-gray-50 border-r flex flex-col p-4 space-y-4">
-                        <select id="select-class" class="p-2 border rounded w-full bg-white outline-none focus:ring-2 focus:ring-blue-500"></select>
-                        <select id="select-problemset" class="p-2 border rounded w-full bg-white outline-none focus:ring-2 focus:ring-blue-500"></select>
-                        
-                        <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mt-2">Problem List</div>
-                        <div id="list-problem" class="flex-grow overflow-y-auto pr-2 space-y-2">
-                            <div class="text-gray-400 text-sm italic">Select a problemset...</div>
+                        <select id="select-class" class="input-base input-blue"></select>
+                        <select id="select-problemset" class="input-base input-blue"></select>
+                        <div class="text-xs font-bold text-gray-500 uppercase mt-2">Problem List</div>
+                        <div id="list-problem" class="flex-grow overflow-y-auto pr-2 space-y-2 text-sm">
+                            <div class="text-gray-400 italic">Select a problemset...</div>
                         </div>
                     </div>
 
-                    <!-- Middle Panel: Description -->
+                    <!-- Middle Panel -->
                     <div class="col-span-4 border-r bg-white p-6 overflow-y-auto" id="problem-description">
                         <div class="h-full flex items-center justify-center text-gray-400 italic">
-                            Select a problem from the left menu to view details.
+                            Select a problem to view details.
                         </div>
                     </div>
 
-                    <!-- Right Panel: Code Editor -->
+                    <!-- Right Panel -->
                     <div class="col-span-5 bg-slate-50 flex flex-col p-4">
                         <div class="flex justify-between items-center mb-2">
-                            <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Source Code</label>
-                            <select id="submit-lang" class="border p-1 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                            <label class="text-xs font-bold text-gray-500 uppercase">Source Code</label>
+                            <select id="submit-lang" class="input-base input-blue w-auto py-1">
                                 <option value="python">Python 3</option>
                                 <option value="cpp">C++</option>
                             </select>
                         </div>
-                        <textarea id="submit-code" class="flex-grow w-full border border-gray-200 p-4 font-mono text-sm rounded focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none shadow-inner" placeholder="def solve():&#10;    pass"></textarea>
+                        <textarea id="submit-code" class="flex-grow w-full border border-gray-200 p-4 font-mono text-sm rounded outline-none focus:ring-2 focus:ring-blue-500 resize-none" placeholder="Write your code here..."></textarea>
                         
-                        <button onclick="submitSolution()" class="mt-4 w-full bg-green-600 text-white font-bold py-3 rounded shadow hover:bg-green-700 transition">Execute & Submit</button>
-                        
+                        <button onclick="submitSolution()" class="btn-base btn-block btn-green mt-4">Execute & Submit</button>
                         <div id="submit-log" class="mt-4 p-4 bg-slate-800 text-green-400 font-mono text-sm rounded min-h-[120px] whitespace-pre-wrap overflow-y-auto">System ready.</div>
                     </div>
                 </div>
             </div>
+
             <!-- TAB: Leaderboard -->
             <div id="tab-leaderboard" class="tab-content hidden">
-                <h1 class="text-3xl font-bold mb-6 text-slate-800">Live Leaderboard</h1>
-                <div class="bg-white p-6 rounded-lg shadow border border-gray-100">
+                <h1 class="page-title">Live Leaderboard</h1>
+                <div class="card-base">
                     <div class="flex space-x-4 mb-6 bg-gray-50 p-4 border rounded">
-                        <select id="lb-select-class" class="border p-2 rounded w-48 outline-none focus:ring-2 focus:ring-blue-500"></select>
-                        <select id="lb-select-set" class="border p-2 rounded w-64 outline-none focus:ring-2 focus:ring-blue-500"></select>
-                        
-                        <button onclick="fetchLeaderboard()" class="bg-blue-600 text-white px-6 rounded font-bold hover:bg-blue-700 transition shadow">Refresh Board</button>
+                        <select id="lb-select-class" class="input-base input-blue w-48"></select>
+                        <select id="lb-select-set" class="input-base input-blue w-64"></select>
+                        <button onclick="fetchLeaderboard()" class="btn-base btn-blue px-6">Refresh Board</button>
                     </div>
                     <div id="lb-results" class="font-mono space-y-2">
                         <div class="text-gray-400 italic">Select a class and problemset to view rankings.</div>
@@ -127,17 +156,17 @@
                 </div>
             </div>
 
-            <!-- TAB: Create Problem (Restricted) -->
+            <!-- TAB: Create Problem -->
             <div id="tab-create" class="tab-content hidden">
                 <div class="flex justify-between items-center mb-6">
-                    <h1 class="text-3xl font-bold text-slate-800">Create New Problem</h1>
+                    <h1 class="page-title mb-0">Create New Problem</h1>
                     <div class="bg-gray-200 p-1 rounded-lg flex space-x-1">
-                        <button id="btn-mode-manual" onclick="switchProblemMode('manual')" class="px-4 py-2 bg-white shadow-sm rounded-md text-sm font-bold text-slate-800 transition">Manual</button>
+                        <button id="btn-mode-manual" onclick="switchProblemMode('manual')" class="px-4 py-2 bg-white rounded-md text-sm font-bold text-slate-800 shadow-sm transition">Manual</button>
                         <button id="btn-mode-zip" onclick="switchProblemMode('zip')" class="px-4 py-2 rounded-md text-sm font-bold text-gray-500 hover:text-slate-800 transition">ZIP Import</button>
                     </div>
                 </div>
                 
-                <div class="bg-white p-8 rounded-lg shadow border border-gray-100">
+                <div class="card-base">
                     <!-- ZIP Mode -->
                     <div id="mode-zip" class="hidden">
                         <div class="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:bg-gray-50 cursor-pointer" onclick="document.getElementById('zip-upload').click()">
@@ -145,61 +174,60 @@
                             <input type="file" id="zip-upload" accept=".zip" class="hidden" onchange="handleZipSelect(event)">
                             <p id="zip-file-name" class="mt-4 text-blue-600 font-bold"></p>
                         </div>
-                        <button onclick="submitZipProblem()" class="mt-4 w-full bg-blue-600 text-white font-bold py-2 rounded">Upload ZIP</button>
+                        <button onclick="submitZipProblem()" class="btn-base btn-block btn-blue mt-4">Upload ZIP</button>
                     </div>
 
                     <!-- Manual Mode -->
                     <div id="mode-manual" class="block">
                         <div class="grid grid-cols-2 gap-6 mb-6">
                             <div>
-                                <label class="block text-sm font-medium mb-1">Title</label>
-                                <input type="text" id="prob-title" class="w-full border rounded p-2">
+                                <label class="form-label">Title</label>
+                                <input type="text" id="prob-title" class="input-base input-blue">
                             </div>
                             <div class="flex space-x-4">
                                 <div class="w-1/2">
-                                    <label class="block text-sm font-medium mb-1">Python Time (s)</label>
-                                    <input type="number" id="time-python" value="2.0" step="0.1" class="w-full border rounded p-2">
+                                    <label class="form-label">Python Time (s)</label>
+                                    <input type="number" id="time-python" value="2.0" step="0.1" class="input-base input-blue">
                                 </div>
                                 <div class="w-1/2">
-                                    <label class="block text-sm font-medium mb-1">C++ Time (s)</label>
-                                    <input type="number" id="time-cpp" value="1.0" step="0.1" class="w-full border rounded p-2">
+                                    <label class="form-label">C++ Time (s)</label>
+                                    <input type="number" id="time-cpp" value="1.0" step="0.1" class="input-base input-blue">
                                 </div>
                             </div>
                         </div>
 
                         <div class="mb-6">
-                            <label class="block text-sm font-medium mb-1">Description</label>
+                            <label class="form-label">Description</label>
                             <div id="editor-container" class="h-64 bg-white"></div>
                         </div>
 
                         <div class="mb-6 border-t pt-6">
                             <div class="flex justify-between items-center mb-4">
-                                <h2 class="text-xl font-bold">Test Cases</h2>
-                                <button onclick="addTestCase()" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">+ Add Case</button>
+                                <h2 class="section-title mb-0 border-none">Test Cases</h2>
+                                <button onclick="addTestCase()" class="btn-base btn-dark text-sm">+ Add Case</button>
                             </div>
                             <div id="testcases-wrapper" class="space-y-4"></div>
                         </div>
 
-                        <button onclick="submitManualProblem()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">Save Problem</button>
+                        <button onclick="submitManualProblem()" class="btn-base btn-block btn-blue">Save Problem</button>
                     </div>
                 </div>
             </div>
-            <!-- TAB: Assign Problems (Restricted) -->
+
+            <!-- TAB: Assign Problems -->
             <div id="tab-assign" class="tab-content hidden">
-                <h1 class="text-3xl font-bold mb-6 text-slate-800">Assign Problems to Class</h1>
-                <div class="bg-white p-6 rounded-lg shadow border border-gray-100 grid grid-cols-2 gap-6 min-h-[500px]">
-                    
+                <h1 class="page-title">Assign Problems to Class</h1>
+                <div class="card-base grid grid-cols-2 gap-6 min-h-[500px]">
                     <!-- Left: Select Target -->
                     <div class="space-y-4 border-r pr-6">
-                        <h2 class="text-xl font-bold mb-4 text-slate-800">1. Select Target</h2>
-                        <select id="assign-class" class="p-2 border rounded w-full bg-white outline-none focus:ring-2 focus:ring-blue-500" onchange="loadAssignProblemsets(this.value)">
+                        <h2 class="section-title">1. Select Target</h2>
+                        <select id="assign-class" class="input-base input-blue" onchange="loadAssignProblemsets(this.value)">
                             <option value="">-- Select Class --</option>
                         </select>
-                        <select id="assign-problemset" class="p-2 border rounded w-full bg-white outline-none focus:ring-2 focus:ring-blue-500" onchange="loadCurrentAssignedProblems(this.value)">
+                        <select id="assign-problemset" class="input-base input-blue" onchange="loadCurrentAssignedProblems(this.value)">
                             <option value="">-- Select Problemset --</option>
                         </select>
                         
-                        <!-- Hiển thị các bài đang có trong tập -->
                         <div id="current-problems-box" class="mt-6 p-4 bg-blue-50 border border-blue-100 rounded hidden">
                             <h3 class="font-bold text-sm text-blue-800 mb-2">Currently Assigned Problems:</h3>
                             <ul id="current-problems-list" class="text-sm space-y-1 text-blue-700 list-disc pl-4"></ul>
@@ -208,64 +236,60 @@
 
                     <!-- Right: Multi-select Problems -->
                     <div class="flex flex-col">
-                        <h2 class="text-xl font-bold mb-4 text-slate-800">2. Select Problems to Add</h2>
+                        <h2 class="section-title">2. Select Problems to Add</h2>
                         <div id="all-problems-list" class="flex-grow overflow-y-auto border rounded p-2 space-y-2 bg-slate-50 mb-4 h-64">
                             <div class="text-gray-400 italic text-sm p-2">Loading problems...</div>
                         </div>
-                        <button onclick="submitAssignProblems()" class="w-full bg-slate-800 text-white font-bold py-3 rounded hover:bg-slate-700 transition shadow">
-                            Add Selected Problems
-                        </button>
+                        <button onclick="submitAssignProblems()" class="btn-base btn-block btn-dark">Add Selected Problems</button>
                     </div>
                 </div>
             </div>
-        <!-- TAB: General Management (Create Class & Problemset) -->
+
+            <!-- TAB: Management -->
             <div id="tab-manage" class="tab-content hidden">
-                <h1 class="text-3xl font-bold mb-6 text-slate-800">Class & Problemset Management</h1>
+                <h1 class="page-title">Class & Problemset Management</h1>
                 <div class="grid grid-cols-2 gap-6">
-                    
-                    <!-- Create Class Card -->
-                    <div class="bg-white p-6 rounded-lg shadow border border-gray-100">
-                        <h2 class="text-xl font-bold mb-4 text-slate-800 border-b pb-2">Create New Classroom</h2>
+                    <div class="card-base">
+                        <h2 class="section-title">Create New Classroom</h2>
                         <div class="space-y-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Class Name</label>
-                                <input type="text" id="create-class-name" placeholder="e.g., Data Structures Fall 2026" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                                <label class="form-label">Class Name</label>
+                                <input type="text" id="create-class-name" placeholder="e.g., Data Structures" class="input-base input-blue">
                             </div>
-                            <button onclick="handleCreateClass()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700 transition">Create Classroom</button>
+                            <button onclick="handleCreateClass()" class="btn-base btn-block btn-blue">Create Classroom</button>
                         </div>
                     </div>
 
-                    <!-- Create Problemset Card -->
-                    <div class="bg-white p-6 rounded-lg shadow border border-gray-100">
-                        <h2 class="text-xl font-bold mb-4 text-slate-800 border-b pb-2">Create Problemset</h2>
+                    <div class="card-base">
+                        <h2 class="section-title">Create Problemset</h2>
                         <div class="space-y-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                                <input type="text" id="create-ps-title" placeholder="e.g., Midterm Exam" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                                <label class="form-label">Title</label>
+                                <input type="text" id="create-ps-title" placeholder="e.g., Midterm Exam" class="input-base input-blue">
                             </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
-                                    <input type="datetime-local" id="create-ps-start" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                                    <label class="form-label">Start Time</label>
+                                    <input type="datetime-local" id="create-ps-start" class="input-base input-blue">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">End Time</label>
-                                    <input type="datetime-local" id="create-ps-end" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                                    <label class="form-label">End Time</label>
+                                    <input type="datetime-local" id="create-ps-end" class="input-base input-blue">
                                 </div>
                             </div>
-                            <button onclick="handleCreateProblemset()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700 transition">Create Problemset</button>
+                            <button onclick="handleCreateProblemset()" class="btn-base btn-block btn-blue">Create Problemset</button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- TAB: User Control (Strictly Admin) -->
+            <!-- TAB: User Control -->
             <div id="tab-users" class="tab-content hidden">
-                <h1 class="text-3xl font-bold mb-6 text-slate-800">User Control Panel</h1>
-                <div class="bg-white p-6 rounded-lg shadow border border-gray-100">
+                <h1 class="page-title">User Control Panel</h1>
+                <div class="card-base">
                     <div class="flex justify-between items-center mb-4">
-                        <p class="text-gray-600 text-sm">Manage roles and permissions for all registered users across the system.</p>
-                        <button onclick="loadAllUsersForAdmin()" class="bg-slate-800 text-white text-sm px-4 py-2 rounded hover:bg-slate-700">Refresh List</button>
+                        <p class="text-gray-600 text-sm">Manage roles and permissions for all users.</p>
+                        <button onclick="loadAllUsersForAdmin()" class="btn-base btn-dark text-sm px-4">Refresh List</button>
                     </div>
                     
                     <div class="overflow-x-auto">
@@ -279,7 +303,6 @@
                                 </tr>
                             </thead>
                             <tbody id="admin-user-list">
-                                <!-- User rows will be injected here -->
                                 <tr>
                                     <td colspan="4" class="px-6 py-4 text-center italic text-gray-500">Loading user data...</td>
                                 </tr>

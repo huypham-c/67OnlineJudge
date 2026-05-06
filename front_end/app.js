@@ -71,6 +71,66 @@ function handleLogout() {
     document.getElementById('login-screen').classList.add('flex');
 }
 
+function toggleAuthMode(mode) {
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    const subtitle = document.getElementById('auth-subtitle');
+    const errorBox = document.getElementById('login-error');
+
+    if(errorBox) errorBox.classList.add('hidden');
+
+    if (mode === 'register') {
+        loginForm.classList.add('hidden');
+        registerForm.classList.remove('hidden');
+        subtitle.innerText = "Create a new student account";
+    } else {
+        registerForm.classList.add('hidden');
+        loginForm.classList.remove('hidden');
+        subtitle.innerText = "Please sign in to continue";
+    }
+}
+
+async function handleRegister() {
+    const u = document.getElementById('register-username').value.trim();
+    const p = document.getElementById('register-password').value;
+    const rp = document.getElementById('register-password-repeat').value;
+    
+    if (p !== rp) {
+        return alert("Passwords do not match.");
+    }
+
+    if (!u || !p) {
+        return alert("Please fill in both username and password.");
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: u, password: p })
+        });
+        
+        const data = await res.json();
+        
+        if (res.ok) {
+            alert("🎉 " + data.message);
+            document.getElementById('login-username').value = u;
+            document.getElementById('login-password').value = p;
+            
+            document.getElementById('register-username').value = "";
+            document.getElementById('register-password').value = "";
+            
+            toggleAuthMode('login');
+            await handleLogin();
+        } else {
+            alert(`❌ Registration failed: ${data.detail}`);
+        }
+    } catch (err) {
+        console.error("Registration error:", err);
+        alert("Cannot connect to server. Please try again later.");
+    }
+}
+
 function setupWorkspace() {
     // Hide login, show dashboard
     document.getElementById('login-screen').classList.add('hidden');

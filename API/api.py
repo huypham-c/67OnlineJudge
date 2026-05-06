@@ -1,6 +1,9 @@
 from fastapi import FastAPI, HTTPException, Depends, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Optional, List, Dict
+from pydantic import BaseModel
+from contextlib import asynccontextmanager
 import jwt
 import datetime
 import asyncio
@@ -11,12 +14,11 @@ import zipfile
 import json
 import tempfile
 import sqlite3
-from typing import Optional, List, Dict
-from pydantic import BaseModel
-from contextlib import asynccontextmanager
+import hashlib
+import uuid
 
 from db.database import DatabaseManager
-from models.users import User
+from models.users import User, Student, Teacher, Admin
 from core.judge import JudgeEngine
 from core.libs import PriorityQueue, BST
 
@@ -62,6 +64,20 @@ app.add_middleware(
 )
 
 # ================= DATA MODELS (PYDANTIC) =================
+
+class RegisterRequest(BaseModel):
+    """
+    Payload for registering a new student account.
+
+    Parameters
+    ----------
+    username : str
+        The desired username for the new account.
+    password : str
+        The plain text password, which will be hashed before storage.
+    """
+    username: str
+    password: str
 
 class LoginRequest(BaseModel):
     """
@@ -337,6 +353,23 @@ class Leaderboard:
 
 active_leaderboards = {}
         
+
+@app.post("/register")
+async def register(request: RegisterRequest) -> dict:
+
+    #implement bloom filter here maybe
+    existing_user = db.get_user_by_username(request.username)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    salted_pass = request.username + request.password
+    hashed_pass = hashlib.sha256(salted_pass.encode('utf-8')).hexdigest()
+    
+    new_user = Student(str(uuid.uuid4()), request.username, hashed_pass)
+    db.save_user(new_user)
+    
+    return {"status": "success", 
+            "message": "Account created successfully. You can now log in."}
 
 @app.post("/login")
 async def login(request: LoginRequest) -> dict:
