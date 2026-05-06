@@ -34,12 +34,14 @@ async def lifespan(app: FastAPI):
         The FastAPI application instance.
     """
     worker_task = asyncio.create_task(background_judge_worker())
+    gc_task = asyncio.create_task(garbage_collector_worker())
     print("Background worker activated!")
     
     yield
     
     print("Stopping server")
     worker_task.cancel()
+    gc_task.cancel()
 
 app = FastAPI(title="67 Online Judge", lifespan=lifespan)
 
@@ -273,9 +275,68 @@ async def background_judge_worker():
             )
             
             db.save_submission(submission, result, problemset_id)
+
+            if problemset_id in active_leaderboards:
+                score = result.get("passed_cases", 0)
+                active_leaderboards[problemset_id].update_submission(
+                    submission.student_id, 
+                    problem.problem_id, 
+                    score
+                )
+                
         else:
             await asyncio.sleep(2)
 
+async def garbage_collector_worker():
+    while True:
+        await asyncio.sleep(120)
+        current_time = time.time()
+        expired_id = []
+        for id, lb in active_leaderboards.items():
+            if current_time - lb.last_accessed > 900:
+                expired_id.append(id)
+                
+        for id in expired_id:
+            del active_leaderboards[id]
+
+class Leaderboard:
+    def __init__(self, problemset_id: str):
+        self.problemset_id = problemset_id
+
+        def _comparator(a: tuple, b: tuple) -> bool:
+            if a[0] == b[0]:
+                return a[1] > b[1] 
+            return a[0] < b[0]
+        
+        self._tree = BST(comparator=_comparator)
+        self._user_highscores = {}
+        self._user_totalscores = {}
+        self.last_accessed = time.time()
+
+    def update_score(self, user_id: str, problem_id: str, score: float):
+        self.last_accessed = time.time()
+
+        if user_id not in self._user_highscores:
+            self._user_highscores[user_id] = {}
+
+        old_score = self._user_highscores[user_id].get(problem_id, 0)
+
+        if score > old_score:
+            old_total = self._user_totalscores.get(user_id, 0)
+            new_total = old_total - old_score + score
+            if user_id in self._user_totalscores:
+                self._tree.delete((old_total, user_id))
+            self._tree.insert((new_total, user_id))
+            self._user_totalscores[user_id] = new_total
+            self._user_highscores[user_id][problem_id] = score
+
+    def get_leaderboard(self):
+        self.last_accessed = time.time()
+        return self._tree.get_sorted_elements()
+
+
+active_leaderboards = {}
+        
 
 @app.post("/login")
 async def login(request: LoginRequest) -> dict:
@@ -506,24 +567,32 @@ async def get_leaderboard(problemset_id: str) -> dict:
     dict
         A structured response containing the ranked user list and scores.
     """
-    raw_scores = db.get_problemset_scores(problemset_id)
-    def comparator(a: tuple, b: tuple) -> bool:
-        if a[0] == b[0]:
-            return a[1] > b[1] 
-        return a[0] < b[0]
-    
-    leaderboard_tree = BST(comparator=comparator)
-    
-    for user_id, score in raw_scores:
-        leaderboard_tree.insert((score, user_id))
+    if problemset_id not in active_leaderboards:
+        new_cache = Leaderboard(problemset_id)
         
-    sorted_elements = leaderboard_tree.get_sorted_elements()
+        conn = sqlite3.connect(db.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT user_id, problem_id, MAX(passed_cases) 
+            FROM Submissions 
+            WHERE problemset_id = ? 
+            GROUP BY user_id, problem_id
+        ''', (problemset_id,))
+        raw_breakdown = cursor.fetchall()
+        conn.close()
+        
+        for uid, pid, max_cases in raw_breakdown:
+            new_cache.update_submission(uid, pid, max_cases)
+            
+        active_leaderboards[problemset_id] = new_cache
+
+    cache = active_leaderboards[problemset_id]
+    sorted_elements = cache.get_leaderboard()
     
     response_data = []
     for rank, (score, uid) in enumerate(sorted_elements, start=1):
         user_info = db.get_user(uid)
         username = user_info.username if user_info else "Unknown User"
-        
         response_data.append({
             "rank": rank,
             "username": username,
