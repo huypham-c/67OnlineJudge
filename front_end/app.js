@@ -345,9 +345,9 @@ async function pollResult(submissionId) {
             logBox.innerText = `⏳ Executing in Sandbox...\nSubmission ID: ${submissionId}`;
             setTimeout(() => pollResult(submissionId), 2000);
         } else {
-            logBox.innerText = `🏁 FINISHED!\nVerdict: ${data.verdict}\nExecution Time: ${data.execution_time}s\nPassed: ${data.passed_cases}/${data.total_cases}`;
+            const score = data.total_cases > 0 ? ((data.passed_cases / data.total_cases) * 10).toFixed(2) : "0.00";
+            logBox.innerText = `🏁 FINISHED!\nVerdict: ${data.verdict}\nExecution Time: ${data.execution_time}s\nScore: ${score}/10.00\nPassed: ${data.passed_cases}/${data.total_cases}`;
             
-            // Auto refresh leaderboard
             const submittedSetId = document.getElementById('select-problemset')?.value || document.getElementById('submit-set-id')?.value;
             const lbSetIdInput = document.getElementById('lb-set-id');
             if (lbSetIdInput && submittedSetId) {
@@ -410,7 +410,7 @@ async function fetchLeaderboard() {
             resultBox.innerHTML = data.leaderboard.map(u => 
                 `<div class="p-3 bg-gray-50 border rounded flex justify-between">
                     <span class="font-bold">#${u.rank} ${u.username}</span>
-                    <span class="text-blue-600 font-bold">${u.score} pts</span>
+                    <span class="text-blue-600 font-bold">${Number(u.score).toFixed(2)} pts</span>
                 </div>`
             ).join('');
         } else {

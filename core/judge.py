@@ -149,7 +149,7 @@ class JudgeEngine:
                         test_details.append(tc_result)
                         if final_verdict == "Accepted":
                             final_verdict = tc_verdict
-                        break
+                        continue
 
                     if result.stdout.strip() != expected_output:
                         tc_result["verdict"] = "Wrong Answer"
@@ -169,7 +169,7 @@ class JudgeEngine:
                     test_details.append(tc_result)
                     if final_verdict == "Accepted":
                         final_verdict = "Time Limit Exceeded"
-                    break
+                    continue
 
         finally:
             if os.path.exists(host_dir):
@@ -265,7 +265,7 @@ class JudgeEngine:
                         test_details.append(tc_result)
                         if final_verdict == "Accepted":
                             final_verdict = tc_verdict
-                        break
+                        continue
 
                     if result.stdout.strip() != expected_output:
                         tc_result["verdict"] = "Wrong Answer"
@@ -285,7 +285,7 @@ class JudgeEngine:
                     test_details.append(tc_result)
                     if final_verdict == "Accepted":
                         final_verdict = "Time Limit Exceeded"
-                    break
+                    continue
 
         finally:
             if os.path.exists(host_dir):

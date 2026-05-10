@@ -293,8 +293,11 @@ async def background_judge_worker():
             db.save_submission(submission, result, problemset_id)
 
             if problemset_id in active_leaderboards:
-                score = result.get("passed_cases", 0)
-                active_leaderboards[problemset_id].update_submission(
+                passed = result.get("passed_cases", 0)
+                total = result.get("total_cases", 1)
+                score = round((passed / total) * 10.0, 2) if total > 0 else 0.0
+                
+                active_leaderboards[problemset_id].update_score(
                     submission.student_id, 
                     problem.problem_id, 
                     score
@@ -606,9 +609,9 @@ async def get_leaderboard(problemset_id: str) -> dict:
         conn = sqlite3.connect(db.db_name)
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT user_id, problem_id, MAX(passed_cases) 
+            SELECT user_id, problem_id, MAX(CAST(passed_cases AS FLOAT) / total_cases * 10) 
             FROM Submissions 
-            WHERE problemset_id = ? 
+            WHERE problemset_id = ? AND total_cases > 0
             GROUP BY user_id, problem_id
         ''', (problemset_id,))
         raw_breakdown = cursor.fetchall()
@@ -629,7 +632,7 @@ async def get_leaderboard(problemset_id: str) -> dict:
         response_data.append({
             "rank": rank,
             "username": username,
-            "score": score
+            "score": round(score, 2)
         })
         
     return {
