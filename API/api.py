@@ -200,6 +200,7 @@ class CreateProblemsetRequest(BaseModel):
     start_time: datetime.datetime
     end_time: datetime.datetime
     problem_ids: List[str] = []
+    class_id: str
 
 class UpdateUserRoleRequest(BaseModel):
     """
@@ -616,9 +617,9 @@ async def get_leaderboard(problemset_id: str) -> dict:
         ''', (problemset_id,))
         raw_breakdown = cursor.fetchall()
         conn.close()
-        
-        for uid, pid, max_cases in raw_breakdown:
-            new_cache.update_submission(uid, pid, max_cases)
+
+        for uid, pid, raw_score in raw_breakdown:
+            new_cache.update_score(uid, pid, round(raw_score, 2) if raw_score else 0.0)
             
         active_leaderboards[problemset_id] = new_cache
 
@@ -714,6 +715,36 @@ async def get_all_problems(user_id: str = Depends(get_current_user_id)):
     conn.close()
     
     return {"problems": [{"problem_id": r[0], "title": r[1]} for r in rows]}
+
+@app.get("/users/me/submissions")
+async def get_my_submissions(user_id: str = Depends(get_current_user_id)) -> dict:
+    conn = sqlite3.connect(db.db_name)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT s.submission_id, s.problem_id, p.title, s.language, s.verdict, 
+               s.execution_time, s.passed_cases, s.total_cases, s.source_code
+        FROM Submissions s
+        LEFT JOIN Problems p ON s.problem_id = p.problem_id
+        WHERE s.user_id = ?
+        ORDER BY s.rowid DESC
+    ''', (user_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    
+    subs = []
+    for r in rows:
+        subs.append({
+            "submission_id": r[0],
+            "problem_id": r[1],
+            "problem_title": r[2] or "Unknown Problem",
+            "language": r[3],
+            "verdict": r[4],
+            "execution_time": r[5],
+            "passed_cases": r[6],
+            "total_cases": r[7],
+            "source_code": r[8]
+        })
+    return {"submissions": subs}
 
 @app.post("/problemsets/{problemset_id}/assign")
 async def assign_problems_to_set(
@@ -830,6 +861,10 @@ async def create_problemset(
     user = db.get_user(user_id)
     if user.__class__.__name__.lower() not in ['teacher', 'admin']:
         raise HTTPException(status_code=403, detail="Not authorized")
+    
+    classroom = db.get_classroom(request.class_id)
+    if not classroom:
+        raise HTTPException(status_code=404, detail="Classroom not found")
         
     problemset = user.create_problem_set(
         title=request.title,
@@ -840,6 +875,10 @@ async def create_problemset(
     )
     
     db.save_problemset(problemset)
+
+    classroom.assign_problemset(problemset.problemset_id)
+    db.save_classroom(classroom)
+
     return {"status": "success", "message": "Problem set created", "problemset_id": problemset.problemset_id}
 
 @app.get("/users")

@@ -525,17 +525,30 @@ async function submitZipProblem() {
 }
 
 // ================= ASSIGN PROBLEMS (TEACHER ONLY) =================
-// 1. Lái dropdown Class từ bên mục Submit qua mục Assign
 const originalLoadClassrooms = loadClassrooms;
 loadClassrooms = async function() {
     await originalLoadClassrooms();
+    
     try {
-        const res = await fetch(`${API_URL}/users/me/classrooms`, { headers: { 'Authorization': `Bearer ${currentUser.token}` } });
+        const res = await fetch(`${API_URL}/users/me/classrooms`, { 
+            headers: { 'Authorization': `Bearer ${currentUser.token}` } 
+        });
         const data = await res.json();
+        
         const assignClassSelect = document.getElementById('assign-class');
-        if (assignClassSelect && data.classrooms && (currentUser.role === 'teacher' || currentUser.role === 'admin')) {
-            assignClassSelect.innerHTML = '<option value="">-- Select Class --</option>' + 
+        const createPsClassSelect = document.getElementById('create-ps-class');
+        
+        if (data.classrooms && (currentUser.role === 'teacher' || currentUser.role === 'admin')) {
+            const classOptions = '<option value="">-- Select Class --</option>' + 
                 data.classrooms.map(c => `<option value="${c.class_id}">${c.class_name}</option>`).join('');
+                
+            if (assignClassSelect) {
+                assignClassSelect.innerHTML = classOptions;
+            }
+            
+            if (createPsClassSelect) {
+                createPsClassSelect.innerHTML = classOptions;
+            }
         }
     } catch (err) {}
 }
@@ -647,10 +660,11 @@ async function handleCreateClass() {
 
 async function handleCreateProblemset() {
     const title = document.getElementById('create-ps-title').value;
+    const classId = document.getElementById('create-ps-class').value;
     const startStr = document.getElementById('create-ps-start').value;
     const endStr = document.getElementById('create-ps-end').value;
 
-    if (!title || !startStr || !endStr) return alert("Please fill all fields.");
+    if (!classId || !title || !startStr || !endStr) return alert("Please fill all fields.");
 
     // Format for Python ISO from HTML datetime-local picker
     const startTime = new Date(startStr).toISOString();
@@ -668,12 +682,14 @@ async function handleCreateProblemset() {
                 description: "Created via Admin Panel",
                 start_time: startTime,
                 end_time: endTime,
-                problem_ids: []
+                problem_ids: [],
+                class_id: classId
             })
         });
         const data = await res.json();
         if (res.ok) {
             alert(`✅ ${data.message} (ID: ${data.problemset_id})`);
+            document.getElementById('create-ps-class').value = '';
             document.getElementById('create-ps-title').value = '';
             document.getElementById('create-ps-start').value = '';
             document.getElementById('create-ps-end').value = '';
@@ -739,4 +755,63 @@ async function updateUserRole(userId, newRole) {
             loadAllUsersForAdmin(); 
         }
     } catch (err) { alert(`Network Error: ${err}`); }
+}
+
+// ================= SUBMISSION HISTORY =================
+async function loadSubmissionHistory() {
+    const tbody = document.getElementById('history-list');
+    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center italic text-gray-500">Loading history...</td></tr>';
+    
+    try {
+        const res = await fetch(`${API_URL}/users/me/submissions`, {
+            headers: { 'Authorization': `Bearer ${currentUser.token}` }
+        });
+        const data = await res.json();
+        
+        if (res.ok && data.submissions) {
+            if (data.submissions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center italic text-gray-500">You have no submissions yet.</td></tr>';
+                return;
+            }
+            
+            window.userSubmissions = data.submissions;
+            
+            tbody.innerHTML = data.submissions.map(sub => {
+                const score = sub.total_cases > 0 ? ((sub.passed_cases / sub.total_cases) * 10).toFixed(2) : "0.00";
+                
+                let verdictColor = 'text-red-600 font-semibold';
+                if (sub.verdict === 'Accepted') verdictColor = 'text-green-600 font-bold';
+                else if (sub.verdict === 'Partial') verdictColor = 'text-orange-500 font-semibold';
+                else if (sub.verdict === 'Pending') verdictColor = 'text-yellow-600';
+
+                return `
+                <tr class="border-b hover:bg-gray-50 transition">
+                    <td class="px-6 py-4 font-mono text-xs text-gray-400">${sub.submission_id.substring(0, 10)}</td>
+                    <td class="px-6 py-4 font-bold text-slate-800">${sub.problem_title}</td>
+                    <td class="px-4 py-4 text-center uppercase text-xs font-semibold bg-gray-100 rounded">${sub.language}</td>
+                    <td class="px-4 py-4 ${verdictColor}">${sub.verdict}</td>
+                    <td class="px-4 py-4 font-bold text-blue-600">${score} pts</td>
+                    <td class="px-4 py-4 text-right">
+                        <button onclick="viewCode('${sub.submission_id}')" class="btn-base btn-dark text-xs px-3 py-1.5 rounded">View Code</button>
+                    </td>
+                </tr>
+                `;
+            }).join('');
+        }
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-red-500">Error: ${err}</td></tr>`;
+    }
+}
+
+function viewCode(submissionId) {
+    if (!window.userSubmissions) return;
+    const sub = window.userSubmissions.find(s => s.submission_id === submissionId);
+    if (sub) {
+        document.getElementById('modal-code-content').textContent = sub.source_code;
+        document.getElementById('code-modal').classList.remove('hidden');
+    }
+}
+
+function closeCodeModal() {
+    document.getElementById('code-modal').classList.add('hidden');
 }

@@ -75,6 +75,7 @@
                             <button onclick="switchTab('tab-overview')" class="tab-btn bg-slate-900 px-3 py-2 rounded-md text-sm font-medium" data-target="tab-overview">Overview</button>
                             <button onclick="switchTab('tab-submit')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" data-target="tab-submit">Submit Code</button>
                             <button onclick="switchTab('tab-leaderboard')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" data-target="tab-leaderboard">Leaderboard</button>
+                            <button onclick="switchTab('tab-history'); loadSubmissionHistory();" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" data-target="tab-history">My Submissions</button>
                             
                             <!-- Restricted Tabs -->
                             <button onclick="switchTab('tab-create')" class="tab-btn hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium admin-only hidden" data-target="tab-create">Create Problem</button>
@@ -152,6 +153,42 @@
                     </div>
                     <div id="lb-results" class="font-mono space-y-2">
                         <div class="text-gray-400 italic">Select a class and problemset to view rankings.</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- TAB: View Submission -->
+            <div id="tab-history" class="tab-content hidden">
+                <h1 class="page-title">Submission History</h1>
+                <div class="card-base p-0 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm text-gray-600">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-100 border-b">
+                                <tr>
+                                    <th class="px-6 py-4">Submission ID</th>
+                                    <th class="px-6 py-4">Problem</th>
+                                    <th class="px-4 py-4 text-center">Lang</th>
+                                    <th class="px-4 py-4">Verdict</th>
+                                    <th class="px-4 py-4 font-bold text-blue-600">Score</th>
+                                    <th class="px-4 py-4 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-list">
+                                <tr><td colspan="6" class="px-6 py-8 text-center italic text-gray-500">Loading history...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="code-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 transition-opacity">
+                <div class="bg-white rounded-lg shadow-2xl w-3/4 max-w-4xl flex flex-col max-h-[85vh]">
+                    <div class="flex justify-between items-center p-4 border-b bg-slate-50 rounded-t-lg">
+                        <h2 class="text-lg font-bold text-slate-800">Source Code Preview</h2>
+                        <button onclick="closeCodeModal()" class="text-gray-400 hover:text-red-500 font-bold text-2xl outline-none">&times;</button>
+                    </div>
+                    <div class="p-6 flex-grow overflow-auto bg-slate-900 text-green-400 font-mono text-sm">
+                        <pre><code id="modal-code-content" class="whitespace-pre-wrap"></code></pre>
                     </div>
                 </div>
             </div>
@@ -263,6 +300,10 @@
                     <div class="card-base">
                         <h2 class="section-title">Create Problemset</h2>
                         <div class="space-y-4">
+                            <div>
+                                <label class="form-label">Assign to Class</label>
+                                <select id="create-ps-class" class="input-base input-blue"></select>
+                            </div>
                             <div>
                                 <label class="form-label">Title</label>
                                 <input type="text" id="create-ps-title" placeholder="e.g., Midterm Exam" class="input-base input-blue">

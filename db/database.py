@@ -128,12 +128,12 @@ def init_db(db_name: str = DEFAULT_DB_PATH):
     ''')
 
     # ADD DEFAULT ADMIN
-    default_pass = "12345678"
-    admin_params = ('1', "admin", hashlib.sha256((default_pass + "admin").encode('utf-8')).hexdigest(), 'admin')
-    cursor.execute(
-        '''INSERT OR IGNORE INTO Users (user_id, username, password_hash, role) VALUES (?, ?, ?, ?)''', 
-        admin_params
-    )
+    # default_pass = "12345678"
+    # admin_params = ('1', "admin", hashlib.sha256((default_pass + "admin").encode('utf-8')).hexdigest(), 'admin')
+    # cursor.execute(
+    #     '''INSERT OR IGNORE INTO Users (user_id, username, password_hash, role) VALUES (?, ?, ?, ?)''', 
+    #     admin_params
+    # )
 
     conn.commit()
     conn.close()
