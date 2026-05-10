@@ -308,6 +308,13 @@ async def background_judge_worker():
             await asyncio.sleep(2)
 
 async def garbage_collector_worker():
+    """
+    Periodically clean up inactive Leaderboard caches from RAM.
+
+    Runs as a background task every 120 seconds. It scans the active_leaderboards
+    dictionary and removes any Red-Black Tree instances that have not been 
+    accessed in the last 15 minutes (900 seconds) to prevent memory leaks.
+    """
     while True:
         await asyncio.sleep(120)
         current_time = time.time()
@@ -320,6 +327,18 @@ async def garbage_collector_worker():
             del active_leaderboards[id]
 
 class Leaderboard:
+    """
+    In-memory cache manager for a problem set's leaderboard.
+
+    Utilizes a Red-Black Tree (BST) to maintain a highly efficient, self-balancing
+    ranking system. Stores individual problem high scores and calculates total 
+    scores dynamically.
+
+    Parameters
+    ----------
+    problemset_id : str
+        The unique identifier of the problem set being tracked.
+    """
     def __init__(self, problemset_id: str):
         self.problemset_id = problemset_id
 
@@ -334,6 +353,22 @@ class Leaderboard:
         self.last_accessed = time.time()
 
     def update_score(self, user_id: str, problem_id: str, score: float):
+        """
+        Update a user's score for a specific problem.
+
+        If the new score is higher than the previously recorded score for this 
+        problem, it recalculates the user's total score, removes their old node 
+        from the BST, and inserts the updated total score node.
+
+        Parameters
+        ----------
+        user_id : str
+            The ID of the user whose score is being updated.
+        problem_id : str
+            The ID of the problem being evaluated.
+        score : float
+            The newly calculated score on a 10-point scale.
+        """
         self.last_accessed = time.time()
 
         if user_id not in self._user_highscores:
@@ -351,6 +386,18 @@ class Leaderboard:
             self._user_highscores[user_id][problem_id] = score
 
     def get_leaderboard(self):
+        """
+        Retrieve the current sorted leaderboard.
+
+        Updates the cache's last accessed timestamp to prevent premature 
+        garbage collection, then performs an Inorder Traversal on the BST.
+
+        Returns
+        -------
+        list
+            A list of tuples structured as (total_score, user_id) sorted 
+            in descending order based on the defined comparator.
+        """
         self.last_accessed = time.time()
         return self._tree.get_sorted_elements()
 
@@ -360,6 +407,24 @@ active_leaderboards = {}
 
 @app.post("/register")
 async def register(request: RegisterRequest) -> dict:
+    """
+    Register a new student account in the system.
+
+    Parameters
+    ----------
+    request : RegisterRequest
+        The payload containing the desired username and plain text password.
+
+    Returns
+    -------
+    dict
+        A status dictionary confirming successful registration.
+
+    Raises
+    ------
+    HTTPException
+        If the requested username already exists in the database.
+    """
 
     #implement bloom filter here maybe
     existing_user = db.get_user_by_username(request.username)
@@ -643,21 +708,76 @@ async def get_leaderboard(problemset_id: str) -> dict:
 
 @app.get("/users/me/classrooms")
 async def get_my_classrooms(user_id: str = Depends(get_current_user_id)) -> dict:
+    """
+    Retrieve all classrooms associated with the currently authenticated user.
+
+    Returns
+    -------
+    dict
+        A dictionary containing a list of classroom objects.
+    """
     classes = db.get_user_classrooms(user_id)
     return {"classrooms": classes}
 
 @app.get("/classrooms/{class_id}/problemsets")
 async def get_classroom_problemsets(class_id: str, user_id: str = Depends(get_current_user_id)) -> dict:
+    """
+    Retrieve all problem sets assigned to a specific classroom.
+
+    Parameters
+    ----------
+    class_id : str
+        The unique identifier of the target classroom.
+
+    Returns
+    -------
+    dict
+        A dictionary containing a list of problem set summaries.
+    """
     sets = db.get_classroom_problemsets(class_id)
     return {"problemsets": sets}
 
 @app.get("/problemsets/{problemset_id}/problems")
 async def get_problemset_problems(problemset_id: str, user_id: str = Depends(get_current_user_id)) -> dict:
+    """
+    Retrieve all coding problems included in a specific problem set.
+
+    Parameters
+    ----------
+    problemset_id : str
+        The unique identifier of the problem set.
+
+    Returns
+    -------
+    dict
+        A dictionary containing a list of problem summaries.
+    """
     probs = db.get_problemset_problems(problemset_id)
     return {"problems": probs}
 
 @app.get("/problems/{problem_id}")
 async def get_problem_details(problem_id: str, user_id: str = Depends(get_current_user_id)) -> dict:
+    """
+    Fetch detailed information about a specific coding problem.
+
+    Reads the HTML description file from local storage and returns it along 
+    with the problem's time and memory constraints.
+
+    Parameters
+    ----------
+    problem_id : str
+        The unique identifier of the problem.
+
+    Returns
+    -------
+    dict
+        A structured dictionary containing problem metadata and HTML description.
+
+    Raises
+    ------
+    HTTPException
+        If the requested problem is not found in the database.
+    """
     problem = db.get_problem(problem_id)
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
@@ -679,12 +799,29 @@ async def get_problem_details(problem_id: str, user_id: str = Depends(get_curren
 
 @app.get("/submissions/{submission_id}")
 async def check_submission_status(submission_id: str) -> dict:
+    """
+    Fetch the real-time evaluation status and details of a code submission.
+
+    Parameters
+    ----------
+    submission_id : str
+        The unique identifier of the submission to check.
+
+    Returns
+    -------
+    dict
+        A dictionary containing execution time, memory used, verdict, and test case results.
+
+    Raises
+    ------
+    HTTPException
+        If the submission record does not exist.
+    """
     sub_data = db.get_submission(submission_id)
     if not sub_data:
         raise HTTPException(status_code=404, detail="Submission not found")
     
     return sub_data
-
 
 @app.get("/problems")
 async def get_all_problems(user_id: str = Depends(get_current_user_id)):
@@ -718,6 +855,18 @@ async def get_all_problems(user_id: str = Depends(get_current_user_id)):
 
 @app.get("/users/me/submissions")
 async def get_my_submissions(user_id: str = Depends(get_current_user_id)) -> dict:
+    """
+    Retrieve the personal submission history of the authenticated user.
+
+    Executes a JOIN query to map submission records to their corresponding 
+    problem titles, returning a chronological list of past submissions including 
+    the raw source code and partial scores.
+
+    Returns
+    -------
+    dict
+        A dictionary containing a list of detailed submission records.
+    """
     conn = sqlite3.connect(db.db_name)
     cursor = conn.cursor()
     cursor.execute('''
