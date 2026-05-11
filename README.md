@@ -36,10 +36,30 @@ Dự án chú trọng vào việc áp dụng các kiến thức về Cấu trúc
 
 ## 🚀 Cài đặt
 
-1. **Yêu cầu hệ thống:** Python 3.8+, Docker.
-2. **Cài đặt thư viện:** `pip install fastapi uvicorn PyJWT pydantic`.
-3. **Môi trường Sandbox:** Đảm bảo Docker đang chạy và image `judge-sandbox` đã được build (hoặc pull).
-4. **Khởi chạy Server:** `python -m uvicorn api:app --reload`.
-
+### 1. Chuẩn bị môi trường
+- Đảm bảo máy tính đã cài đặt **Python 3.8+** và **Docker**.
+- Clone repository về máy:
+  ```bash
+  git clone https://github.com/huypham-c/67OnlineJudge
+  cd 67OnlineJudge
+  ```
+### 2. Xây dựng Sandbox Image
+- Sử dụng Dockerfile có sẵn để build image cho máy chấm:
+  ```bash
+  docker build -t judge-sandbox:latest .
+  ```
+### 3. Cài đặt Dependencies
+- 
+  ```bash
+  python -m venv venv
+  source venv/bin/activate  # Trên Windows dùng: venv\\Scripts\\activate
+  pip install fastapi uvicorn PyJWT pydantic
+  ```
+### 4. Chạy Server
+- 
+  ```bash
+  python -m uvicorn api:app --reload
+  ```
+  Trang web sẽ có thể được truy cập tại `http://localhost:8000`
 ---
 *Dự án được thực hiện như một đồ án môn học DSA.*
