@@ -201,6 +201,7 @@ class CreateProblemsetRequest(BaseModel):
     end_time: datetime.datetime
     problem_ids: List[str] = []
     class_id: str
+    set_type: str
 
 class UpdateUserRoleRequest(BaseModel):
     """
@@ -1023,6 +1024,8 @@ async def create_problemset(
         end_time=request.end_time
     )
     
+    problemset.set_type = request.set_type
+
     db.save_problemset(problemset)
 
     classroom.assign_problemset(problemset.problemset_id)

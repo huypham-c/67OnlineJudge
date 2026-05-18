@@ -660,6 +660,7 @@ async function handleCreateClass() {
 
 async function handleCreateProblemset() {
     const title = document.getElementById('create-ps-title').value;
+    const setType = document.getElementById('create-ps-type').value;
     const classId = document.getElementById('create-ps-class').value;
     const startStr = document.getElementById('create-ps-start').value;
     const endStr = document.getElementById('create-ps-end').value;
@@ -683,7 +684,8 @@ async function handleCreateProblemset() {
                 start_time: startTime,
                 end_time: endTime,
                 problem_ids: [],
-                class_id: classId
+                class_id: classId,
+                set_type: setType
             })
         });
         const data = await res.json();
